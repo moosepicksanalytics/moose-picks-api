@@ -131,6 +131,16 @@ def get_latest_predictions(sport: str = "NFL", limit: int = 10):
             logger.warning(f"Error fetching games: {game_error}")
             games = {}
         
+        # Helper function to safely convert float values (handle nan)
+        import math
+        def safe_float(value):
+            """Convert float to JSON-safe value (None if nan or None)."""
+            if value is None:
+                return None
+            if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+                return None
+            return float(value) if value is not None else None
+        
         # Convert to dict format
         picks = []
         for pred in predictions:
@@ -149,24 +159,27 @@ def get_latest_predictions(sport: str = "NFL", limit: int = 10):
                 "model_version": pred.model_version,
             }
             
-            # Add market-specific data
+            # Add market-specific data with safe float conversion
             if pred.market == "moneyline":
-                pick["side"] = "home" if pred.home_win_prob and pred.home_win_prob > 0.5 else "away"
-                pick["home_win_prob"] = pred.home_win_prob
-                pick["edge"] = abs(pred.home_win_prob - 0.5) if pred.home_win_prob else 0
+                home_prob = safe_float(pred.home_win_prob)
+                pick["side"] = "home" if home_prob and home_prob > 0.5 else "away"
+                pick["home_win_prob"] = home_prob
+                pick["edge"] = abs(home_prob - 0.5) if home_prob is not None else 0.0
             elif pred.market == "spread":
-                pick["side"] = "home" if pred.spread_cover_prob and pred.spread_cover_prob > 0.5 else "away"
-                pick["spread_cover_prob"] = pred.spread_cover_prob
-                pick["spread"] = game.spread
-                pick["edge"] = abs(pred.spread_cover_prob - 0.5) if pred.spread_cover_prob else 0
+                spread_prob = safe_float(pred.spread_cover_prob)
+                pick["side"] = "home" if spread_prob and spread_prob > 0.5 else "away"
+                pick["spread_cover_prob"] = spread_prob
+                pick["spread"] = safe_float(game.spread)
+                pick["edge"] = abs(spread_prob - 0.5) if spread_prob is not None else 0.0
             elif pred.market == "totals" or pred.market == "over_under":
-                pick["side"] = "over" if pred.over_prob and pred.over_prob > 0.5 else "under"
-                pick["over_prob"] = pred.over_prob
-                pick["over_under"] = game.over_under
-                pick["edge"] = abs(pred.over_prob - 0.5) if pred.over_prob else 0
+                over_prob = safe_float(pred.over_prob)
+                pick["side"] = "over" if over_prob and over_prob > 0.5 else "under"
+                pick["over_prob"] = over_prob
+                pick["over_under"] = safe_float(game.over_under)
+                pick["edge"] = abs(over_prob - 0.5) if over_prob is not None else 0.0
             
-            pick["recommended_kelly"] = pred.recommended_kelly
-            pick["recommended_unit_size"] = pred.recommended_unit_size
+            pick["recommended_kelly"] = safe_float(pred.recommended_kelly)
+            pick["recommended_unit_size"] = safe_float(pred.recommended_unit_size) if pred.recommended_unit_size is not None else 1.0
             
             picks.append(pick)
         
@@ -357,6 +370,16 @@ def get_predictions_by_date_range(
             Prediction.settled == False  # Only unsettled predictions
         ).all()
         
+        # Helper function to safely convert float values (handle nan)
+        import math
+        def safe_float(value):
+            """Convert float to JSON-safe value (None if nan or None)."""
+            if value is None:
+                return None
+            if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+                return None
+            return float(value) if value is not None else None
+        
         # Convert to dict format
         picks = []
         for pred in predictions:
@@ -375,24 +398,27 @@ def get_predictions_by_date_range(
                 "model_version": pred.model_version,
             }
             
-            # Add market-specific data
+            # Add market-specific data with safe float conversion
             if pred.market == "moneyline":
-                pick["side"] = "home" if pred.home_win_prob and pred.home_win_prob > 0.5 else "away"
-                pick["home_win_prob"] = pred.home_win_prob
-                pick["edge"] = abs(pred.home_win_prob - 0.5) if pred.home_win_prob else 0
+                home_prob = safe_float(pred.home_win_prob)
+                pick["side"] = "home" if home_prob and home_prob > 0.5 else "away"
+                pick["home_win_prob"] = home_prob
+                pick["edge"] = abs(home_prob - 0.5) if home_prob is not None else 0.0
             elif pred.market == "spread":
-                pick["side"] = "home" if pred.spread_cover_prob and pred.spread_cover_prob > 0.5 else "away"
-                pick["spread_cover_prob"] = pred.spread_cover_prob
-                pick["spread"] = game.spread
-                pick["edge"] = abs(pred.spread_cover_prob - 0.5) if pred.spread_cover_prob else 0
+                spread_prob = safe_float(pred.spread_cover_prob)
+                pick["side"] = "home" if spread_prob and spread_prob > 0.5 else "away"
+                pick["spread_cover_prob"] = spread_prob
+                pick["spread"] = safe_float(game.spread)
+                pick["edge"] = abs(spread_prob - 0.5) if spread_prob is not None else 0.0
             elif pred.market == "totals" or pred.market == "over_under":
-                pick["side"] = "over" if pred.over_prob and pred.over_prob > 0.5 else "under"
-                pick["over_prob"] = pred.over_prob
-                pick["over_under"] = game.over_under
-                pick["edge"] = abs(pred.over_prob - 0.5) if pred.over_prob else 0
+                over_prob = safe_float(pred.over_prob)
+                pick["side"] = "over" if over_prob and over_prob > 0.5 else "under"
+                pick["over_prob"] = over_prob
+                pick["over_under"] = safe_float(game.over_under)
+                pick["edge"] = abs(over_prob - 0.5) if over_prob is not None else 0.0
             
-            pick["recommended_kelly"] = pred.recommended_kelly
-            pick["recommended_unit_size"] = pred.recommended_unit_size
+            pick["recommended_kelly"] = safe_float(pred.recommended_kelly)
+            pick["recommended_unit_size"] = safe_float(pred.recommended_unit_size) if pred.recommended_unit_size is not None else 1.0
             
             picks.append(pick)
         

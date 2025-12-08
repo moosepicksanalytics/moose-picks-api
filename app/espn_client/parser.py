@@ -3,9 +3,17 @@ from app.models.db_models import Game
 from datetime import datetime
 
 
-def parse_and_store_games(sport: str, games_data: list):
+def parse_and_store_games(sport: str, games_data: list, only_final: bool = False):
     """
     Parse ESPN JSON events and store in DB.
+    
+    Args:
+        sport: Sport code
+        games_data: List of ESPN event dicts
+        only_final: If True, only store games with final scores (for training)
+    
+    Returns:
+        Number of games stored
     """
     db = SessionLocal()
     stored_count = 0
@@ -24,6 +32,26 @@ def parse_and_store_games(sport: str, games_data: list):
             home = competitors[0]
             away = competitors[1]
             
+            # Extract status and normalize
+            status_raw = event.get("status", {}).get("type", {}).get("name", "")
+            # Normalize ESPN status values: "STATUS_FINAL" -> "final", etc.
+            if "FINAL" in status_raw.upper():
+                status = "final"
+            elif "SCHEDULED" in status_raw.upper():
+                status = "scheduled"
+            elif "IN_PROGRESS" in status_raw.upper() or "LIVE" in status_raw.upper():
+                status = "in_progress"
+            else:
+                status = status_raw.lower() if status_raw else "scheduled"
+            
+            # Get scores
+            home_score = int(home.get("score", 0)) if home.get("score") is not None else None
+            away_score = int(away.get("score", 0)) if away.get("score") is not None else None
+            
+            # If only_final is True, skip games without final scores
+            if only_final and (status != "final" or home_score is None or away_score is None):
+                continue
+            
             # Extract odds - try different paths
             home_moneyline = None
             away_moneyline = None
@@ -41,18 +69,6 @@ def parse_and_store_games(sport: str, games_data: list):
                 if odds.get("spread"):
                     spread = float(odds.get("spread"))
             
-            # Extract status and normalize
-            status_raw = event.get("status", {}).get("type", {}).get("name", "")
-            # Normalize ESPN status values: "STATUS_FINAL" -> "final", etc.
-            if "FINAL" in status_raw.upper():
-                status = "final"
-            elif "SCHEDULED" in status_raw.upper():
-                status = "scheduled"
-            elif "IN_PROGRESS" in status_raw.upper() or "LIVE" in status_raw.upper():
-                status = "in_progress"
-            else:
-                status = status_raw.lower() if status_raw else "scheduled"
-            
             # Create game record
             game = Game(
                 id=game_id,
@@ -66,8 +82,8 @@ def parse_and_store_games(sport: str, games_data: list):
                 away_moneyline=away_moneyline,
                 spread=spread,
                 over_under=over_under,
-                home_score=int(home.get("score", 0)) if home.get("score") is not None else None,
-                away_score=int(away.get("score", 0)) if away.get("score") is not None else None,
+                home_score=home_score,
+                away_score=away_score,
                 espn_data=event,
             )
             
@@ -83,11 +99,12 @@ def parse_and_store_games(sport: str, games_data: list):
             stored_count += 1
         
         db.commit()
-        print(f"✓ Stored {stored_count} games for {sport}")
+        return stored_count
     except Exception as e:
         print(f"✗ Error parsing/storing games: {e}")
         import traceback
         traceback.print_exc()
         db.rollback()
+        return 0
     finally:
         db.close()
