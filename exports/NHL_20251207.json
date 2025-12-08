@@ -1,0 +1,51 @@
+[
+  {
+    "game_id": "401802807",
+    "league": "NHL",
+    "season": "2025",
+    "date": "2025-12-07",
+    "home_team": "Dallas Stars",
+    "away_team": "Pittsburgh Penguins",
+    "moneyline": {
+      "home_win_prob": 0.7492833389172264,
+      "away_win_prob": 0.2507166610827736,
+      "home_odds": null,
+      "away_odds": null,
+      "home_implied_prob": 0.5,
+      "away_implied_prob": 0.5,
+      "home_edge": 0.24928333891722643,
+      "away_edge": -0.24928333891722643,
+      "best_side": "home",
+      "best_edge": 0.24928333891722643
+    },
+    "spread": {
+      "cover_prob": 0.6345013679340418,
+      "line": null,
+      "price": -110,
+      "implied_prob": 0.5238095238095238,
+      "edge": 0.11069184412451794,
+      "side": "favorite"
+    },
+    "totals": {
+      "over_prob": 0.23464249503727633,
+      "under_prob": 0.7653575049627237,
+      "line": null,
+      "over_odds": -110,
+      "under_odds": -110,
+      "over_implied_prob": 0.5238095238095238,
+      "under_implied_prob": 0.5238095238095238,
+      "over_edge": -0.2653575049627237,
+      "under_edge": 0.2653575049627237,
+      "best_side": "under",
+      "best_edge": 0.2653575049627237
+    },
+    "proj_home_score": 4.022507517029413,
+    "proj_away_score": 3.1286795391029205,
+    "top_pick": {
+      "market_type": "totals",
+      "side": "under",
+      "edge": 0.2653575049627237,
+      "prob": 0.7653575049627237
+    }
+  }
+]

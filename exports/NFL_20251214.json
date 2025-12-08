@@ -1,0 +1,590 @@
+[
+  {
+    "game_id": "401772904",
+    "league": "NFL",
+    "season": "2025",
+    "date": "2025-12-14",
+    "home_team": "Chicago Bears",
+    "away_team": "Cleveland Browns",
+    "moneyline": {
+      "home_win_prob": 0.6936089252524228,
+      "away_win_prob": 0.3063910747475772,
+      "home_odds": null,
+      "away_odds": null,
+      "home_implied_prob": 0.5,
+      "away_implied_prob": 0.5,
+      "home_edge": 0.1936089252524228,
+      "away_edge": -0.1936089252524228,
+      "best_side": "home",
+      "best_edge": 0.1936089252524228
+    },
+    "spread": {
+      "cover_prob": 0.7182971513632687,
+      "line": -7.0,
+      "price": -110,
+      "implied_prob": 0.5238095238095238,
+      "edge": 0.19448762755374482,
+      "side": "favorite"
+    },
+    "totals": {
+      "over_prob": 0.8374203545577347,
+      "under_prob": 0.16257964544226533,
+      "line": 40.5,
+      "over_odds": -110,
+      "under_odds": -110,
+      "over_implied_prob": 0.5238095238095238,
+      "under_implied_prob": 0.5238095238095238,
+      "over_edge": 0.33742035455773467,
+      "under_edge": -0.33742035455773467,
+      "best_side": "over",
+      "best_edge": 0.33742035455773467
+    },
+    "proj_home_score": 29.537268606246798,
+    "proj_away_score": 18.27530505401829,
+    "top_pick": {
+      "market_type": "totals",
+      "side": "over",
+      "edge": 0.33742035455773467,
+      "prob": 0.8374203545577347
+    }
+  },
+  {
+    "game_id": "401772796",
+    "league": "NFL",
+    "season": "2025",
+    "date": "2025-12-14",
+    "home_team": "Cincinnati Bengals",
+    "away_team": "Baltimore Ravens",
+    "moneyline": {
+      "home_win_prob": 0.5968352115645043,
+      "away_win_prob": 0.40316478843549575,
+      "home_odds": null,
+      "away_odds": null,
+      "home_implied_prob": 0.5,
+      "away_implied_prob": 0.5,
+      "home_edge": 0.09683521156450425,
+      "away_edge": -0.09683521156450425,
+      "best_side": "home",
+      "best_edge": 0.09683521156450425
+    },
+    "spread": {
+      "cover_prob": 0.5916675785114696,
+      "line": 1.5,
+      "price": -110,
+      "implied_prob": 0.5238095238095238,
+      "edge": 0.06785805470194572,
+      "side": "favorite"
+    },
+    "totals": {
+      "over_prob": 0.16541484575032023,
+      "under_prob": 0.8345851542496798,
+      "line": 52.5,
+      "over_odds": -110,
+      "under_odds": -110,
+      "over_implied_prob": 0.5238095238095238,
+      "under_implied_prob": 0.5238095238095238,
+      "over_edge": -0.3345851542496798,
+      "under_edge": 0.33458515424967983,
+      "best_side": "under",
+      "best_edge": 0.33458515424967983
+    },
+    "proj_home_score": 23.773491750313386,
+    "proj_away_score": 24.32229438979961,
+    "top_pick": {
+      "market_type": "totals",
+      "side": "under",
+      "edge": 0.33458515424967983,
+      "prob": 0.8345851542496798
+    }
+  },
+  {
+    "game_id": "401772798",
+    "league": "NFL",
+    "season": "2025",
+    "date": "2025-12-14",
+    "home_team": "Kansas City Chiefs",
+    "away_team": "Los Angeles Chargers",
+    "moneyline": {
+      "home_win_prob": 0.524953676265853,
+      "away_win_prob": 0.475046323734147,
+      "home_odds": null,
+      "away_odds": null,
+      "home_implied_prob": 0.5,
+      "away_implied_prob": 0.5,
+      "home_edge": 0.024953676265852986,
+      "away_edge": -0.024953676265852986,
+      "best_side": "home",
+      "best_edge": 0.024953676265852986
+    },
+    "spread": {
+      "cover_prob": 0.4910286295496755,
+      "line": -5.5,
+      "price": -110,
+      "implied_prob": 0.5238095238095238,
+      "edge": -0.032780894259848314,
+      "side": "underdog"
+    },
+    "totals": {
+      "over_prob": 0.10190598671458043,
+      "under_prob": 0.8980940132854196,
+      "line": 44.5,
+      "over_odds": -110,
+      "under_odds": -110,
+      "over_implied_prob": 0.5238095238095238,
+      "under_implied_prob": 0.5238095238095238,
+      "over_edge": -0.3980940132854196,
+      "under_edge": 0.3980940132854196,
+      "best_side": "under",
+      "best_edge": 0.3980940132854196
+    },
+    "proj_home_score": 16.221494166871665,
+    "proj_away_score": 23.955278850697216,
+    "top_pick": {
+      "market_type": "totals",
+      "side": "under",
+      "edge": 0.3980940132854196,
+      "prob": 0.8980940132854196
+    }
+  },
+  {
+    "game_id": "401772795",
+    "league": "NFL",
+    "season": "2025",
+    "date": "2025-12-14",
+    "home_team": "New England Patriots",
+    "away_team": "Buffalo Bills",
+    "moneyline": {
+      "home_win_prob": 0.8539683610739034,
+      "away_win_prob": 0.1460316389260966,
+      "home_odds": null,
+      "away_odds": null,
+      "home_implied_prob": 0.5,
+      "away_implied_prob": 0.5,
+      "home_edge": 0.3539683610739034,
+      "away_edge": -0.3539683610739034,
+      "best_side": "home",
+      "best_edge": 0.3539683610739034
+    },
+    "spread": {
+      "cover_prob": 0.7145634956058524,
+      "line": 1.5,
+      "price": -110,
+      "implied_prob": 0.5238095238095238,
+      "edge": 0.19075397179632858,
+      "side": "favorite"
+    },
+    "totals": {
+      "over_prob": 0.13036085579243423,
+      "under_prob": 0.8696391442075657,
+      "line": 50.5,
+      "over_odds": -110,
+      "under_odds": -110,
+      "over_implied_prob": 0.5238095238095238,
+      "under_implied_prob": 0.5238095238095238,
+      "over_edge": -0.3696391442075658,
+      "under_edge": 0.3696391442075657,
+      "best_side": "under",
+      "best_edge": 0.3696391442075657
+    },
+    "proj_home_score": 30.31715706201935,
+    "proj_away_score": 15.882103955305814,
+    "top_pick": {
+      "market_type": "totals",
+      "side": "under",
+      "edge": 0.3696391442075657,
+      "prob": 0.8696391442075657
+    }
+  },
+  {
+    "game_id": "401772905",
+    "league": "NFL",
+    "season": "2025",
+    "date": "2025-12-14",
+    "home_team": "New York Giants",
+    "away_team": "Washington Commanders",
+    "moneyline": {
+      "home_win_prob": 0.18214821166685088,
+      "away_win_prob": 0.8178517883331491,
+      "home_odds": null,
+      "away_odds": null,
+      "home_implied_prob": 0.5,
+      "away_implied_prob": 0.5,
+      "home_edge": -0.3178517883331491,
+      "away_edge": 0.3178517883331491,
+      "best_side": "away",
+      "best_edge": 0.3178517883331491
+    },
+    "spread": {
+      "cover_prob": 0.20738998235194653,
+      "line": -1.5,
+      "price": -110,
+      "implied_prob": 0.5238095238095238,
+      "edge": -0.31641954145757734,
+      "side": "underdog"
+    },
+    "totals": {
+      "over_prob": 0.17191429341792266,
+      "under_prob": 0.8280857065820774,
+      "line": 46.5,
+      "over_odds": -110,
+      "under_odds": -110,
+      "over_implied_prob": 0.5238095238095238,
+      "under_implied_prob": 0.5238095238095238,
+      "over_edge": -0.32808570658207736,
+      "under_edge": 0.32808570658207736,
+      "best_side": "under",
+      "best_edge": 0.32808570658207736
+    },
+    "proj_home_score": 20.454243831913054,
+    "proj_away_score": 29.48591912186922,
+    "top_pick": {
+      "market_type": "totals",
+      "side": "under",
+      "edge": 0.32808570658207736,
+      "prob": 0.8280857065820774
+    }
+  },
+  {
+    "game_id": "401772906",
+    "league": "NFL",
+    "season": "2025",
+    "date": "2025-12-14",
+    "home_team": "Philadelphia Eagles",
+    "away_team": "Las Vegas Raiders",
+    "moneyline": {
+      "home_win_prob": 0.9544616505014025,
+      "away_win_prob": 0.045538349498597475,
+      "home_odds": null,
+      "away_odds": null,
+      "home_implied_prob": 0.5,
+      "away_implied_prob": 0.5,
+      "home_edge": 0.4544616505014025,
+      "away_edge": -0.4544616505014025,
+      "best_side": "home",
+      "best_edge": 0.4544616505014025
+    },
+    "spread": {
+      "cover_prob": 0.9763087975697257,
+      "line": -13.5,
+      "price": -110,
+      "implied_prob": 0.5238095238095238,
+      "edge": 0.4524992737602018,
+      "side": "favorite"
+    },
+    "totals": {
+      "over_prob": 0.9612238896242203,
+      "under_prob": 0.03877611037577966,
+      "line": 39.5,
+      "over_odds": -110,
+      "under_odds": -110,
+      "over_implied_prob": 0.5238095238095238,
+      "under_implied_prob": 0.5238095238095238,
+      "over_edge": 0.46122388962422034,
+      "under_edge": -0.46122388962422034,
+      "best_side": "over",
+      "best_edge": 0.46122388962422034
+    },
+    "proj_home_score": 27.248408382640942,
+    "proj_away_score": 27.05988582231737,
+    "top_pick": {
+      "market_type": "totals",
+      "side": "over",
+      "edge": 0.46122388962422034,
+      "prob": 0.9612238896242203
+    }
+  },
+  {
+    "game_id": "401772797",
+    "league": "NFL",
+    "season": "2025",
+    "date": "2025-12-14",
+    "home_team": "Jacksonville Jaguars",
+    "away_team": "New York Jets",
+    "moneyline": {
+      "home_win_prob": 0.9478760561808075,
+      "away_win_prob": 0.0521239438191925,
+      "home_odds": null,
+      "away_odds": null,
+      "home_implied_prob": 0.5,
+      "away_implied_prob": 0.5,
+      "home_edge": 0.4478760561808075,
+      "away_edge": -0.4478760561808075,
+      "best_side": "home",
+      "best_edge": 0.4478760561808075
+    },
+    "spread": {
+      "cover_prob": 0.9213976801747924,
+      "line": -12.5,
+      "price": -110,
+      "implied_prob": 0.5238095238095238,
+      "edge": 0.39758815636526856,
+      "side": "favorite"
+    },
+    "totals": {
+      "over_prob": 0.7305968979554119,
+      "under_prob": 0.26940310204458806,
+      "line": 41.5,
+      "over_odds": -110,
+      "under_odds": -110,
+      "over_implied_prob": 0.5238095238095238,
+      "under_implied_prob": 0.5238095238095238,
+      "over_edge": 0.23059689795541194,
+      "under_edge": -0.23059689795541194,
+      "best_side": "over",
+      "best_edge": 0.23059689795541194
+    },
+    "proj_home_score": 36.8245690477855,
+    "proj_away_score": 21.457906463830316,
+    "top_pick": {
+      "market_type": "moneyline",
+      "side": "home",
+      "edge": 0.4478760561808075,
+      "prob": 0.9478760561808075
+    }
+  },
+  {
+    "game_id": "401772903",
+    "league": "NFL",
+    "season": "2025",
+    "date": "2025-12-14",
+    "home_team": "Houston Texans",
+    "away_team": "Arizona Cardinals",
+    "moneyline": {
+      "home_win_prob": 0.9370737109786981,
+      "away_win_prob": 0.06292628902130193,
+      "home_odds": null,
+      "away_odds": null,
+      "home_implied_prob": 0.5,
+      "away_implied_prob": 0.5,
+      "home_edge": 0.43707371097869807,
+      "away_edge": -0.43707371097869807,
+      "best_side": "home",
+      "best_edge": 0.43707371097869807
+    },
+    "spread": {
+      "cover_prob": 0.9051903254838143,
+      "line": -7.5,
+      "price": -110,
+      "implied_prob": 0.5238095238095238,
+      "edge": 0.38138080167429045,
+      "side": "favorite"
+    },
+    "totals": {
+      "over_prob": 0.7722396652419273,
+      "under_prob": 0.22776033475807267,
+      "line": 42.5,
+      "over_odds": -110,
+      "under_odds": -110,
+      "over_implied_prob": 0.5238095238095238,
+      "under_implied_prob": 0.5238095238095238,
+      "over_edge": 0.27223966524192733,
+      "under_edge": -0.27223966524192733,
+      "best_side": "over",
+      "best_edge": 0.27223966524192733
+    },
+    "proj_home_score": 26.277116246149237,
+    "proj_away_score": 21.408973379129815,
+    "top_pick": {
+      "market_type": "moneyline",
+      "side": "home",
+      "edge": 0.43707371097869807,
+      "prob": 0.9370737109786981
+    }
+  },
+  {
+    "game_id": "401772800",
+    "league": "NFL",
+    "season": "2025",
+    "date": "2025-12-14",
+    "home_team": "Denver Broncos",
+    "away_team": "Green Bay Packers",
+    "moneyline": {
+      "home_win_prob": 0.3232144598146497,
+      "away_win_prob": 0.6767855401853503,
+      "home_odds": null,
+      "away_odds": null,
+      "home_implied_prob": 0.5,
+      "away_implied_prob": 0.5,
+      "home_edge": -0.1767855401853503,
+      "away_edge": 0.1767855401853503,
+      "best_side": "away",
+      "best_edge": 0.1767855401853503
+    },
+    "spread": {
+      "cover_prob": 0.31744989391377504,
+      "line": 1.5,
+      "price": -110,
+      "implied_prob": 0.5238095238095238,
+      "edge": -0.2063596298957488,
+      "side": "underdog"
+    },
+    "totals": {
+      "over_prob": 0.026728067235081737,
+      "under_prob": 0.9732719327649183,
+      "line": 41.5,
+      "over_odds": -110,
+      "under_odds": -110,
+      "over_implied_prob": 0.5238095238095238,
+      "under_implied_prob": 0.5238095238095238,
+      "over_edge": -0.47327193276491825,
+      "under_edge": 0.4732719327649183,
+      "best_side": "under",
+      "best_edge": 0.4732719327649183
+    },
+    "proj_home_score": 22.81007489545671,
+    "proj_away_score": 22.033501223304356,
+    "top_pick": {
+      "market_type": "totals",
+      "side": "under",
+      "edge": 0.4732719327649183,
+      "prob": 0.9732719327649183
+    }
+  },
+  {
+    "game_id": "401772909",
+    "league": "NFL",
+    "season": "2025",
+    "date": "2025-12-14",
+    "home_team": "Los Angeles Rams",
+    "away_team": "Detroit Lions",
+    "moneyline": {
+      "home_win_prob": 0.6806402039652454,
+      "away_win_prob": 0.3193597960347546,
+      "home_odds": null,
+      "away_odds": null,
+      "home_implied_prob": 0.5,
+      "away_implied_prob": 0.5,
+      "home_edge": 0.18064020396524538,
+      "away_edge": -0.18064020396524538,
+      "best_side": "home",
+      "best_edge": 0.18064020396524538
+    },
+    "spread": {
+      "cover_prob": 0.8527576689766835,
+      "line": -4.5,
+      "price": -110,
+      "implied_prob": 0.5238095238095238,
+      "edge": 0.32894814516715964,
+      "side": "favorite"
+    },
+    "totals": {
+      "over_prob": 0.6790619972048361,
+      "under_prob": 0.32093800279516393,
+      "line": 52.5,
+      "over_odds": -110,
+      "under_odds": -110,
+      "over_implied_prob": 0.5238095238095238,
+      "under_implied_prob": 0.5238095238095238,
+      "over_edge": 0.17906199720483607,
+      "under_edge": -0.17906199720483607,
+      "best_side": "over",
+      "best_edge": 0.17906199720483607
+    },
+    "proj_home_score": 29.90721607549957,
+    "proj_away_score": 31.741988350181874,
+    "top_pick": {
+      "market_type": "spread",
+      "side": "favorite",
+      "edge": 0.32894814516715964,
+      "prob": 0.8527576689766835
+    }
+  },
+  {
+    "game_id": "401772907",
+    "league": "NFL",
+    "season": "2025",
+    "date": "2025-12-14",
+    "home_team": "San Francisco 49ers",
+    "away_team": "Tennessee Titans",
+    "moneyline": {
+      "home_win_prob": 0.9789379383768754,
+      "away_win_prob": 0.021062061623124628,
+      "home_odds": null,
+      "away_odds": null,
+      "home_implied_prob": 0.5,
+      "away_implied_prob": 0.5,
+      "home_edge": 0.47893793837687537,
+      "away_edge": -0.47893793837687537,
+      "best_side": "home",
+      "best_edge": 0.47893793837687537
+    },
+    "spread": {
+      "cover_prob": 0.9784298970441253,
+      "line": -12.5,
+      "price": -110,
+      "implied_prob": 0.5238095238095238,
+      "edge": 0.45462037323460147,
+      "side": "favorite"
+    },
+    "totals": {
+      "over_prob": 0.6895703199690052,
+      "under_prob": 0.3104296800309948,
+      "line": 45.5,
+      "over_odds": -110,
+      "under_odds": -110,
+      "over_implied_prob": 0.5238095238095238,
+      "under_implied_prob": 0.5238095238095238,
+      "over_edge": 0.1895703199690052,
+      "under_edge": -0.1895703199690052,
+      "best_side": "over",
+      "best_edge": 0.1895703199690052
+    },
+    "proj_home_score": 37.87071305323675,
+    "proj_away_score": 20.053955852973495,
+    "top_pick": {
+      "market_type": "moneyline",
+      "side": "home",
+      "edge": 0.47893793837687537,
+      "prob": 0.9789379383768754
+    }
+  },
+  {
+    "game_id": "401772799",
+    "league": "NFL",
+    "season": "2025",
+    "date": "2025-12-14",
+    "home_team": "Seattle Seahawks",
+    "away_team": "Indianapolis Colts",
+    "moneyline": {
+      "home_win_prob": 0.9176945338084528,
+      "away_win_prob": 0.08230546619154722,
+      "home_odds": null,
+      "away_odds": null,
+      "home_implied_prob": 0.5,
+      "away_implied_prob": 0.5,
+      "home_edge": 0.4176945338084528,
+      "away_edge": -0.4176945338084528,
+      "best_side": "home",
+      "best_edge": 0.4176945338084528
+    },
+    "spread": {
+      "cover_prob": 0.9547478009741277,
+      "line": -10.0,
+      "price": -110,
+      "implied_prob": 0.5238095238095238,
+      "edge": 0.43093827716460387,
+      "side": "favorite"
+    },
+    "totals": {
+      "over_prob": 0.02908809246980514,
+      "under_prob": 0.9709119075301949,
+      "line": 43.5,
+      "over_odds": -110,
+      "under_odds": -110,
+      "over_implied_prob": 0.5238095238095238,
+      "under_implied_prob": 0.5238095238095238,
+      "over_edge": -0.47091190753019485,
+      "under_edge": 0.47091190753019485,
+      "best_side": "under",
+      "best_edge": 0.47091190753019485
+    },
+    "proj_home_score": 34.31531819947687,
+    "proj_away_score": 14.04001382867399,
+    "top_pick": {
+      "market_type": "totals",
+      "side": "under",
+      "edge": 0.47091190753019485,
+      "prob": 0.9709119075301949
+    }
+  }
+]
