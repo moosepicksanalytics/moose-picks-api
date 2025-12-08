@@ -35,7 +35,7 @@ def trigger_daily_workflow(
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from scripts.daily_automation import daily_workflow
     
-    sports_list = [s.strip() for s in sports.split(",")] if sports else ["NFL", "NHL"]
+    sports_list = [s.strip() for s in sports.split(",")] if sports else ["NFL", "NHL", "NBA", "MLB"]
     
     def run_workflow():
         try:

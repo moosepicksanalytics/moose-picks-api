@@ -206,20 +206,28 @@ def get_season_date_range(sport: str, season_year: int) -> Tuple[str, str]:
     Get start and end dates for a season.
     
     Args:
-        sport: Sport code (NFL, NHL)
-        season_year: Year of the season (for NFL/NHL, this is the year season starts)
+        sport: Sport code (NFL, NHL, NBA, MLB)
+        season_year: Year of the season (year season starts)
     
     Returns:
         Tuple of (start_date, end_date) in YYYY-MM-DD format
     """
     if sport == "NFL":
-        # NFL season: September to February
+        # NFL season: September to February (next year)
         start_date = f"{season_year}-09-01"
         end_date = f"{season_year + 1}-02-28"
     elif sport == "NHL":
-        # NHL season: October to June
+        # NHL season: October to June (next year)
         start_date = f"{season_year}-10-01"
         end_date = f"{season_year + 1}-06-30"
+    elif sport == "NBA":
+        # NBA season: October to June (next year)
+        start_date = f"{season_year}-10-01"
+        end_date = f"{season_year + 1}-06-30"
+    elif sport == "MLB":
+        # MLB season: March to November (same year)
+        start_date = f"{season_year}-03-01"
+        end_date = f"{season_year}-11-30"
     else:
         # Default: calendar year
         start_date = f"{season_year}-01-01"

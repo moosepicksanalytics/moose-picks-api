@@ -1,9 +1,11 @@
 # Training Configuration for Moose Picks ML Pipeline
 
-# Seasons to use for training (format: YYYY for NFL/NHL)
+# Seasons to use for training (format: YYYY for NFL/NHL/NBA/MLB)
 training_seasons:
   NFL: [2020, 2021, 2022, 2023, 2024]
   NHL: [2020, 2021, 2022, 2023, 2024]
+  NBA: [2020, 2021, 2022, 2023, 2024]
+  MLB: [2020, 2021, 2022, 2023, 2024]
 
 # Train/validation split strategy
 # Options: "season" (hold out last N seasons), "week" (hold out last N weeks), "random" (random split)
