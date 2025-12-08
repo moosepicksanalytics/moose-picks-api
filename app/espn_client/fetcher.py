@@ -27,11 +27,20 @@ def fetch_games_for_date(sport: str, date_str: str) -> List[Dict]:
     
     league = sport_map.get(sport, sport.lower())
     
-    # ESPN API URL
-    url = f"https://site.api.espn.com/apis/site/v2/sports/{league}/nfl/scoreboard"
+    # ESPN API URL - map sport codes to ESPN league segments
+    # ESPN uses different league segments in the URL path
+    league_segment_map = {
+        "NFL": "nfl",
+        "NHL": "nhl",
+        "NBA": "nba",
+        "MLB": "mlb",
+    }
     
-    if sport == "NHL":
-        url = f"https://site.api.espn.com/apis/site/v2/sports/{league}/nhl/scoreboard"
+    # Get the league segment for the URL (default to sport code lowercase if not mapped)
+    league_segment = league_segment_map.get(sport, sport.lower())
+    
+    # Construct URL dynamically based on sport
+    url = f"https://site.api.espn.com/apis/site/v2/sports/{league}/{league_segment}/scoreboard"
     
     try:
         response = requests.get(url, params={"dates": date_str.replace("-", "")})

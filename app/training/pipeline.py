@@ -105,8 +105,27 @@ def prepare_labels(df: pd.DataFrame, sport: str, market: str) -> pd.Series:
     elif market == "totals":
         # 1 if over, 0 if under
         if "over_under" not in df.columns or df["over_under"].isna().all():
-            # Estimate total from averages
-            total = df["home_points_for_avg"] + df["away_points_for_avg"]
+            # Estimate total from averages - use windowed version (default is 10)
+            # Try different window sizes, starting with the default
+            home_col = None
+            away_col = None
+            for window in [10, 15, 5, 3]:  # Try most common windows first
+                if f"home_points_for_avg_{window}" in df.columns:
+                    home_col = f"home_points_for_avg_{window}"
+                    away_col = f"away_points_for_avg_{window}"
+                    break
+            
+            if home_col and away_col:
+                total = df[home_col].fillna(0) + df[away_col].fillna(0)
+            else:
+                # Fallback: use actual scores if available, otherwise default to 0
+                # This should rarely happen if features were built correctly
+                total = pd.Series([0] * len(df))
+                if "home_score" in df.columns and "away_score" in df.columns:
+                    # Use a simple average if we have some score data
+                    avg_home = df["home_score"].mean() if not df["home_score"].isna().all() else 0
+                    avg_away = df["away_score"].mean() if not df["away_score"].isna().all() else 0
+                    total = pd.Series([avg_home + avg_away] * len(df))
         else:
             total = df["over_under"]
         return (df["home_score"] + df["away_score"] > total).astype(int)
