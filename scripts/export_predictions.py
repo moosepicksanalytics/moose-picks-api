@@ -355,27 +355,29 @@ def export_predictions_for_date(
     # Load games from database
     db = SessionLocal()
     try:
+        from datetime import timezone
         date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
         
-        # Use date-only comparison to avoid timezone issues
-        # This works regardless of whether dates are timezone-aware or naive
+        # Games are stored in UTC from ESPN, so we need to query using UTC timezone
+        # Query for games on this date in UTC
+        start_datetime_utc = datetime.combine(date_obj, datetime.min.time(), tzinfo=timezone.utc)
+        end_datetime_utc = datetime.combine(date_obj + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
+        
+        # Try date-only comparison first (works with func.date)
         all_games = db.query(Game).filter(
             Game.sport == sport,
             func.date(Game.date) == date_obj
         ).all()
         
-        # If using PostgreSQL and func.date doesn't work, try datetime range
+        # If no games, try UTC datetime range (for timezone-aware dates)
         if not all_games:
-            from datetime import timezone
-            start_datetime = datetime.combine(date_obj, datetime.min.time(), tzinfo=timezone.utc)
-            end_datetime = datetime.combine(date_obj + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
             all_games = db.query(Game).filter(
                 Game.sport == sport,
-                Game.date >= start_datetime,
-                Game.date < end_datetime,
+                Game.date >= start_datetime_utc,
+                Game.date < end_datetime_utc,
             ).all()
         
-        # Final fallback: naive datetime (for SQLite)
+        # Final fallback: naive datetime range (for SQLite or if dates are naive)
         if not all_games:
             start_datetime_naive = datetime.combine(date_obj, datetime.min.time())
             end_datetime_naive = datetime.combine(date_obj + timedelta(days=1), datetime.min.time())
