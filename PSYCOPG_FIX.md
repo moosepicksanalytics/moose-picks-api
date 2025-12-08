@@ -33,9 +33,13 @@ psycopg[binary]==3.2.0
 
 ## What Changed
 
+**File:** `requirements.txt`
 - `psycopg2-binary` → `psycopg[binary]` (psycopg3)
-- SQLAlchemy will automatically use psycopg3 if available
-- No code changes needed - SQLAlchemy handles the switch automatically
+
+**File:** `app/database.py`
+- Added `get_database_url()` function to convert `postgresql://` → `postgresql+psycopg://`
+- This ensures SQLAlchemy uses psycopg3 instead of defaulting to psycopg2
+- Works seamlessly with Railway's `postgresql://` connection strings
 
 ## Next Steps
 
@@ -65,11 +69,20 @@ psycopg[binary]==3.2.0
 
 ## Technical Details
 
-SQLAlchemy 2.0.44 automatically detects and uses:
-- `psycopg` (psycopg3) if available
-- Falls back to `psycopg2` if psycopg3 not found
+**Important:** SQLAlchemy 2.0.44 **defaults to `psycopg2`** for `postgresql://` URLs.
 
-The connection string format remains the same:
-- `postgresql://user:pass@host:port/db` works with both
-- SQLAlchemy handles the driver selection automatically
+To use `psycopg3`, you must:
+1. Install `psycopg[binary]` (done in requirements.txt)
+2. Use `postgresql+psycopg://` in the connection string (done in database.py)
+
+**Why the conversion is needed:**
+- Railway provides: `postgresql://user:pass@host:port/db`
+- SQLAlchemy sees `postgresql://` → tries to use `psycopg2` (not installed)
+- Our code converts to: `postgresql+psycopg://user:pass@host:port/db`
+- SQLAlchemy sees `postgresql+psycopg://` → uses `psycopg3` (installed) ✅
+
+**Connection string formats:**
+- `postgresql://` → Uses psycopg2 (default, not installed)
+- `postgresql+psycopg://` → Uses psycopg3 (explicit, installed) ✅
+- `sqlite://` → Uses sqlite3 (unchanged)
 
