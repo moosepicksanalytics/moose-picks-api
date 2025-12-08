@@ -139,20 +139,21 @@ def daily_workflow(
             dates_to_check.append(tomorrow)  # Also check tomorrow for UTC games
         
         for sport in sports:
-            for check_date in dates_to_check:
-                try:
-                    print(f"\nGenerating predictions for {sport} on {check_date}...")
-                    export_predictions_for_date(
-                        sport=sport,
-                        date_str=check_date,
-                        config_path=config_path,
-                        output_dir="exports",
-                        min_edge=min_edge
-                    )
-                except Exception as e:
-                    print(f"✗ Prediction generation failed for {sport} on {check_date}: {e}")
-                    import traceback
-                    traceback.print_exc()
+            try:
+                for check_date in dates_to_check:
+                    try:
+                        print(f"\nGenerating predictions for {sport} on {check_date}...")
+                        export_predictions_for_date(
+                            sport=sport,
+                            date_str=check_date,
+                            config_path=config_path,
+                            output_dir="exports",
+                            min_edge=min_edge
+                        )
+                    except Exception as e:
+                        print(f"✗ Prediction generation failed for {sport} on {check_date}: {e}")
+                        import traceback
+                        traceback.print_exc()
             except Exception as e:
                 print(f"✗ Prediction generation failed for {sport}: {e}")
                 import traceback

@@ -440,17 +440,34 @@ def export_predictions_for_date(
         
         # Filter for games that are not final (scheduled or in progress)
         # Also check if games have scores - if no scores, they can't be final
+        # Also check game time - if game is in the future, it can't be final
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
+        
         games = []
         for g in all_games:
-            # Game is not final if:
-            # 1. Status is not "final" AND
-            # 2. Either no scores OR status is explicitly scheduled/in_progress
+            # Game is final only if:
+            # 1. Status is "final" AND
+            # 2. Has scores AND
+            # 3. Game time is in the past
+            game_time = g.date
+            if game_time.tzinfo is None:
+                # If naive datetime, assume UTC
+                game_time = game_time.replace(tzinfo=timezone.utc)
+            
             is_final = (
                 g.status and 
                 g.status.lower() in ["final", "completed", "finished"] and
                 g.home_score is not None and 
-                g.away_score is not None
+                g.away_score is not None and
+                game_time < now  # Game has started/finished
             )
+            
+            # Also check: if game is in the future, it can't be final
+            if game_time > now:
+                # Game hasn't started yet - definitely not final
+                is_final = False
+            
             if not is_final:
                 games.append(g)
         
