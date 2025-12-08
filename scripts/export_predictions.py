@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.database import SessionLocal
 from app.models.db_models import Game
+from sqlalchemy import func
 from app.training.features import build_features, get_feature_columns
 from app.utils.odds import (
     calculate_moneyline_edge,
@@ -355,23 +356,98 @@ def export_predictions_for_date(
     db = SessionLocal()
     try:
         date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
-        # Use timedelta to properly handle month/year boundaries
-        start_datetime = datetime.combine(date_obj, datetime.min.time())
-        end_datetime = datetime.combine(date_obj + timedelta(days=1), datetime.min.time())
         
-        games = db.query(Game).filter(
+        # Use date-only comparison to avoid timezone issues
+        # This works regardless of whether dates are timezone-aware or naive
+        all_games = db.query(Game).filter(
             Game.sport == sport,
-            Game.date >= start_datetime,
-            Game.date < end_datetime,
-        ).filter(
-            # Handle both normalized and ESPN status formats
-            (Game.status.in_(["scheduled", "in_progress", "STATUS_SCHEDULED", "STATUS_IN_PROGRESS"])) |
-            (Game.status.ilike("%scheduled%")) |
-            (Game.status.ilike("%in_progress%"))
+            func.date(Game.date) == date_obj
         ).all()
         
-        if not games:
+        # If using PostgreSQL and func.date doesn't work, try datetime range
+        if not all_games:
+            from datetime import timezone
+            start_datetime = datetime.combine(date_obj, datetime.min.time(), tzinfo=timezone.utc)
+            end_datetime = datetime.combine(date_obj + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
+            all_games = db.query(Game).filter(
+                Game.sport == sport,
+                Game.date >= start_datetime,
+                Game.date < end_datetime,
+            ).all()
+        
+        # Final fallback: naive datetime (for SQLite)
+        if not all_games:
+            start_datetime_naive = datetime.combine(date_obj, datetime.min.time())
+            end_datetime_naive = datetime.combine(date_obj + timedelta(days=1), datetime.min.time())
+            all_games = db.query(Game).filter(
+                Game.sport == sport,
+                Game.date >= start_datetime_naive,
+                Game.date < end_datetime_naive,
+            ).all()
+        
+        if not all_games:
             print(f"No games found for {sport} on {date_str}")
+            print(f"  (Checked date: {date_obj})")
+            
+            # Debug: Check what games exist for this sport (any date)
+            all_sport_games = db.query(Game).filter(Game.sport == sport).order_by(Game.date.desc()).limit(10).all()
+            if all_sport_games:
+                print(f"  Debug: Found {len(all_sport_games)} recent {sport} games in database:")
+                for g in all_sport_games[:5]:
+                    print(f"    - {g.date} ({g.status}): {g.away_team} @ {g.home_team}")
+            else:
+                print(f"  Debug: No {sport} games found in database at all")
+            
+            # Try to fetch games from ESPN if none in DB
+            print(f"  Attempting to fetch games from ESPN...")
+            try:
+                from app.espn_client.fetcher import fetch_games_for_date
+                from app.espn_client.parser import parse_and_store_games
+                fetched_games = fetch_games_for_date(sport, date_str)
+                if fetched_games:
+                    stored = parse_and_store_games(sport, fetched_games, only_final=False)
+                    print(f"  ✓ Fetched and stored {stored} games from ESPN")
+                    # Retry query with timezone-aware
+                    all_games = db.query(Game).filter(
+                        Game.sport == sport,
+                        Game.date >= start_datetime,
+                        Game.date < end_datetime,
+                    ).all()
+                    # If still none, try naive datetime
+                    if not all_games:
+                        start_datetime_naive = datetime.combine(date_obj, datetime.min.time())
+                        end_datetime_naive = datetime.combine(date_obj + timedelta(days=1), datetime.min.time())
+                        all_games = db.query(Game).filter(
+                            Game.sport == sport,
+                            Game.date >= start_datetime_naive,
+                            Game.date < end_datetime_naive,
+                        ).all()
+                else:
+                    print(f"  No games available from ESPN for {sport} on {date_str}")
+                    return
+            except Exception as e:
+                print(f"  Error fetching from ESPN: {e}")
+                return
+        
+        # Debug: Show what games were found
+        print(f"Found {len(all_games)} total games for {sport} on {date_str}")
+        if all_games:
+            print(f"  Sample game dates: {[g.date for g in all_games[:3]]}")
+            print(f"  Sample game statuses: {[g.status for g in all_games[:3]]}")
+            print(f"  Sample game teams: {[f'{g.away_team} @ {g.home_team}' for g in all_games[:3]]}")
+        
+        # Filter for games that are not final (scheduled or in progress)
+        games = [
+            g for g in all_games 
+            if g.status and g.status.lower() not in ["final", "completed", "finished"]
+        ]
+        
+        if not games:
+            print(f"No scheduled/in-progress games found for {sport} on {date_str}")
+            print(f"  Found {len(all_games)} total games, but all are final/completed")
+            if all_games:
+                print(f"  Game statuses: {[g.status for g in all_games[:5]]}")
+                print(f"  All game IDs: {[g.id for g in all_games[:5]]}")
             return
         
         print(f"Found {len(games)} games for {sport} on {date_str}")
