@@ -14,7 +14,7 @@
 
 ### 1. Updated `requirements.txt`
 ```python
-psycopg[binary]==3.2.0  # Replaces psycopg2-binary
+psycopg[binary]==3.2.13  # Replaces psycopg2-binary (3.2.0 doesn't exist, using latest 3.2.x)
 ```
 
 ### 2. Updated `app/database.py`

@@ -28,7 +28,7 @@ psycopg2-binary==2.9.9
 
 **After:**
 ```
-psycopg[binary]==3.2.0
+psycopg[binary]==3.2.13
 ```
 
 ## What Changed
@@ -50,7 +50,7 @@ psycopg[binary]==3.2.0
    git push
    ```
 
-2. **Railway will auto-deploy** and install `psycopg[binary]==3.2.0`
+2. **Railway will auto-deploy** and install `psycopg[binary]==3.2.13`
 
 3. **Verify it works:**
    ```powershell
