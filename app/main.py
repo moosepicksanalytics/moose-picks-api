@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import logging
 
@@ -29,6 +30,15 @@ except Exception as e:
     raise
 
 app = FastAPI(title="Moose Picks API", version="0.1")
+
+# Add CORS middleware to allow requests from Lovable
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins (can be restricted to specific Lovable domains in production)
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allow all headers
+)
 
 # Include API router for Lovable/scheduled tasks
 app.include_router(api_router, prefix="/api", tags=["automation"])
