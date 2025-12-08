@@ -89,39 +89,135 @@ def health_check():
 @router.get("/predictions/latest")
 def get_latest_predictions(sport: str = "NFL", limit: int = 10):
     """
-    Get latest predictions from exports directory.
+    Get latest predictions from database (unsettled predictions).
+    Falls back to CSV exports if database has no predictions.
     Useful for Lovable to fetch recent predictions.
     
     Args:
         sport: Sport code (NFL, NHL, NBA, MLB)
         limit: Maximum number of predictions to return
     """
-    import json
+    from app.database import SessionLocal
+    from app.models.db_models import Prediction, Game
+    from datetime import datetime, timedelta
+    
+    db = SessionLocal()
+    try:
+        # Get unsettled predictions for this sport, ordered by most recent
+        predictions = db.query(Prediction).filter(
+            Prediction.sport == sport,
+            Prediction.settled == False
+        ).order_by(Prediction.predicted_at.desc()).limit(limit * 2).all()  # Get more to filter by edge
+        
+        if not predictions:
+            # Fallback to CSV if no database predictions
+            return _get_latest_predictions_from_csv(sport, limit)
+        
+        # Get associated games
+        game_ids = [p.game_id for p in predictions]
+        games = {g.id: g for g in db.query(Game).filter(Game.id.in_(game_ids)).all()}
+        
+        # Convert to dict format
+        picks = []
+        for pred in predictions:
+            game = games.get(pred.game_id)
+            if not game:
+                continue
+            
+            # Build prediction dict based on market
+            pick = {
+                "game_id": pred.game_id,
+                "sport": pred.sport,
+                "market": pred.market,
+                "date": game.date.isoformat() if game.date else None,
+                "home_team": game.home_team,
+                "away_team": game.away_team,
+                "model_version": pred.model_version,
+            }
+            
+            # Add market-specific data
+            if pred.market == "moneyline":
+                pick["side"] = "home" if pred.home_win_prob and pred.home_win_prob > 0.5 else "away"
+                pick["home_win_prob"] = pred.home_win_prob
+                pick["edge"] = abs(pred.home_win_prob - 0.5) if pred.home_win_prob else 0
+            elif pred.market == "spread":
+                pick["side"] = "home" if pred.spread_cover_prob and pred.spread_cover_prob > 0.5 else "away"
+                pick["spread_cover_prob"] = pred.spread_cover_prob
+                pick["spread"] = game.spread
+                pick["edge"] = abs(pred.spread_cover_prob - 0.5) if pred.spread_cover_prob else 0
+            elif pred.market == "totals" or pred.market == "over_under":
+                pick["side"] = "over" if pred.over_prob and pred.over_prob > 0.5 else "under"
+                pick["over_prob"] = pred.over_prob
+                pick["over_under"] = game.over_under
+                pick["edge"] = abs(pred.over_prob - 0.5) if pred.over_prob else 0
+            
+            pick["recommended_kelly"] = pred.recommended_kelly
+            pick["recommended_unit_size"] = pred.recommended_unit_size
+            
+            picks.append(pick)
+        
+        # Sort by edge and limit
+        picks_sorted = sorted(picks, key=lambda x: x.get("edge", 0), reverse=True)[:limit]
+        
+        return {
+            "sport": sport,
+            "source": "database",
+            "total_predictions": len(picks),
+            "top_picks": picks_sorted
+        }
+        
+    except Exception as e:
+        # If database query fails, try CSV fallback
+        try:
+            return _get_latest_predictions_from_csv(sport, limit)
+        except Exception as csv_error:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error fetching predictions: {str(e)}. CSV fallback also failed: {str(csv_error)}"
+            )
+    finally:
+        db.close()
+
+
+def _get_latest_predictions_from_csv(sport: str, limit: int):
+    """Fallback: Get predictions from CSV exports directory."""
     from pathlib import Path
     import pandas as pd
     
     exports_dir = Path("exports")
     if not exports_dir.exists():
-        raise HTTPException(status_code=404, detail="No exports found")
+        raise HTTPException(status_code=404, detail="No exports directory found and no database predictions available")
     
     # Find latest CSV for the sport
     csv_files = sorted(exports_dir.glob(f"{sport}_*.csv"), key=lambda p: p.stat().st_mtime, reverse=True)
     
     if not csv_files:
-        raise HTTPException(status_code=404, detail=f"No predictions found for {sport}")
+        raise HTTPException(status_code=404, detail=f"No predictions found for {sport} (no CSV files and no database predictions)")
     
     latest_csv = csv_files[0]
-    df = pd.read_csv(latest_csv)
     
-    # Return top picks by edge
-    df_sorted = df.sort_values("edge", ascending=False).head(limit)
-    
-    return {
-        "sport": sport,
-        "file": latest_csv.name,
-        "total_predictions": len(df),
-        "top_picks": df_sorted.to_dict("records")
-    }
+    try:
+        df = pd.read_csv(latest_csv)
+        
+        if df.empty:
+            raise HTTPException(status_code=404, detail=f"CSV file {latest_csv.name} is empty")
+        
+        # Check if 'edge' column exists
+        if "edge" not in df.columns:
+            raise HTTPException(status_code=500, detail=f"CSV file {latest_csv.name} missing 'edge' column")
+        
+        # Return top picks by edge
+        df_sorted = df.sort_values("edge", ascending=False).head(limit)
+        
+        return {
+            "sport": sport,
+            "source": "csv",
+            "file": latest_csv.name,
+            "total_predictions": len(df),
+            "top_picks": df_sorted.to_dict("records")
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading CSV file {latest_csv.name}: {str(e)}")
 
 
 @router.get("/predictions/date-range")
@@ -246,6 +342,11 @@ def get_predictions_by_date_range(
             "top_picks": picks_sorted
         }
         
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching predictions: {str(e)}"
+        )
     finally:
         db.close()
 
