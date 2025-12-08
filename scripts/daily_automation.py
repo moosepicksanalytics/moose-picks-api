@@ -1,0 +1,197 @@
+"""
+Daily automation script for training models and generating predictions.
+Can be run manually or scheduled via cron/task scheduler.
+"""
+import sys
+from pathlib import Path
+from datetime import datetime, timedelta
+import argparse
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from scripts.train_all import train_all_models
+from scripts.export_predictions import export_predictions_for_date
+from app.espn_client.fetcher import fetch_games_for_date
+from app.espn_client.parser import parse_and_store_games
+from app.prediction.settling import settle_predictions
+
+
+def fetch_todays_games(sports: list = ["NFL", "NHL"]):
+    """Fetch and store today's games from ESPN."""
+    today = datetime.now()
+    date_str = today.strftime("%Y-%m-%d")
+    
+    print(f"\n{'='*60}")
+    print(f"Fetching Today's Games ({date_str})")
+    print(f"{'='*60}\n")
+    
+    total_games = 0
+    for sport in sports:
+        print(f"Fetching {sport} games...")
+        games = fetch_games_for_date(sport, date_str)
+        if games:
+            parse_and_store_games(sport, games)
+            total_games += len(games)
+            print(f"  ✓ Stored {len(games)} {sport} games")
+        else:
+            print(f"  No {sport} games found for today")
+    
+    print(f"\n✓ Total games fetched: {total_games}")
+    return total_games
+
+
+def daily_workflow(
+    sports: list = ["NFL", "NHL"],
+    train: bool = True,
+    predict: bool = True,
+    predict_date: str = None,
+    min_edge: float = 0.05,
+    config_path: str = "config.yaml"
+):
+    """
+    Complete daily workflow: fetch games, train models, generate predictions.
+    
+    Args:
+        sports: List of sports to process
+        train: Whether to retrain models
+        predict: Whether to generate predictions
+        predict_date: Date to predict for (default: today)
+        min_edge: Minimum edge threshold for predictions
+        config_path: Path to config.yaml
+    """
+    print("=" * 70)
+    print("Moose Picks ML - Daily Automation")
+    print("=" * 70)
+    print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Sports: {', '.join(sports)}")
+    print("=" * 70)
+    
+    today = datetime.now()
+    today_str = today.strftime("%Y-%m-%d")
+    yesterday = today - timedelta(days=1)
+    yesterday_str = yesterday.strftime("%Y-%m-%d")
+    
+    # Step 1: Settle yesterday's predictions
+    print("\n[1/4] Settling yesterday's predictions...")
+    try:
+        for sport in sports:
+            print(f"Settling {sport} predictions for {yesterday_str}...")
+            settle_predictions(yesterday_str, sport=sport)
+    except Exception as e:
+        print(f"✗ Error settling predictions: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    # Step 2: Fetch today's games
+    print("\n[2/4] Fetching today's games...")
+    fetch_todays_games(sports)
+    
+    # Step 3: Train models (if requested)
+    if train:
+        print("\n[3/4] Training models...")
+        try:
+            train_all_models(config_path)
+            print("✓ Model training completed")
+        except Exception as e:
+            print(f"✗ Model training failed: {e}")
+            import traceback
+            traceback.print_exc()
+    else:
+        print("\n[3/4] Skipping model training (--no-train flag)")
+    
+    # Step 4: Generate predictions (if requested)
+    if predict:
+        print("\n[4/4] Generating predictions...")
+        if predict_date is None:
+            predict_date = today_str
+        
+        for sport in sports:
+            try:
+                print(f"\nGenerating predictions for {sport} on {predict_date}...")
+                export_predictions_for_date(
+                    sport=sport,
+                    date_str=predict_date,
+                    config_path=config_path,
+                    output_dir="exports",
+                    min_edge=min_edge
+                )
+            except Exception as e:
+                print(f"✗ Prediction generation failed for {sport}: {e}")
+                import traceback
+                traceback.print_exc()
+    else:
+        print("\n[4/4] Skipping prediction generation (--no-predict flag)")
+    
+    print("\n" + "=" * 70)
+    print("Daily workflow complete!")
+    print("=" * 70)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Daily automation for training and predictions",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Full workflow (fetch, train, predict)
+  python scripts/daily_automation.py
+  
+  # Only generate predictions (no training)
+  python scripts/daily_automation.py --no-train
+  
+  # Only train models (no predictions)
+  python scripts/daily_automation.py --no-predict
+  
+  # Predict for a specific date
+  python scripts/daily_automation.py --predict-date 2024-12-15
+  
+  # Only NFL
+  python scripts/daily_automation.py --sports NFL
+        """
+    )
+    
+    parser.add_argument(
+        "--sports",
+        type=str,
+        nargs="+",
+        default=["NFL", "NHL"],
+        help="Sports to process (default: NFL NHL)"
+    )
+    parser.add_argument(
+        "--no-train",
+        action="store_true",
+        help="Skip model training"
+    )
+    parser.add_argument(
+        "--no-predict",
+        action="store_true",
+        help="Skip prediction generation"
+    )
+    parser.add_argument(
+        "--predict-date",
+        type=str,
+        help="Date to generate predictions for (YYYY-MM-DD, default: today)"
+    )
+    parser.add_argument(
+        "--min-edge",
+        type=float,
+        default=0.05,
+        help="Minimum edge threshold for predictions (default: 0.05)"
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="config.yaml",
+        help="Path to config.yaml (default: config.yaml)"
+    )
+    
+    args = parser.parse_args()
+    
+    daily_workflow(
+        sports=args.sports,
+        train=not args.no_train,
+        predict=not args.no_predict,
+        predict_date=args.predict_date,
+        min_edge=args.min_edge,
+        config_path=args.config
+    )

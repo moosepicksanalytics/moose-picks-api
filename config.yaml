@@ -1,0 +1,53 @@
+# Training Configuration for Moose Picks ML Pipeline
+
+# Seasons to use for training (format: YYYY for NFL/NHL)
+training_seasons:
+  NFL: [2020, 2021, 2022, 2023, 2024]
+  NHL: [2020, 2021, 2022, 2023, 2024]
+
+# Train/validation split strategy
+# Options: "season" (hold out last N seasons), "week" (hold out last N weeks), "random" (random split)
+split_strategy: "season"
+validation_seasons: 1  # Number of seasons/weeks to hold out for validation
+
+# Minimum games required for a team to be included in training
+min_games_per_team: 10
+
+# Edge threshold for surfacing plays (minimum edge to recommend a bet)
+min_edge_threshold: 0.05  # 5% edge minimum
+
+# Model configuration
+models:
+  moneyline:
+    algorithm: "xGBoost"
+    n_estimators: 100
+    max_depth: 3
+    learning_rate: 0.01
+  spread:
+    algorithm: "xGBoost"
+    n_estimators: 100
+    max_depth: 5
+    learning_rate: 0.1
+  totals:
+    algorithm: "xGBoost"
+    n_estimators: 100
+    max_depth: 5
+    learning_rate: 0.1
+  score_projection:
+    algorithm: "xGBoost"
+    n_estimators: 100
+    max_depth: 5
+    learning_rate: 0.1
+
+# Feature engineering
+features:
+  rolling_window_games: 15  # Number of recent games for rolling stats
+  include_rest_days: true
+  include_home_away_splits: true
+  include_head_to_head: true
+
+# Export settings
+export:
+  output_dir: "exports"
+  formats: ["csv", "json"]
+  include_all_markets: true
