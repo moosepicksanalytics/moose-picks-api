@@ -115,22 +115,15 @@ Create `railway.json` in your project root:
 ```json
 {
   "$schema": "https://railway.app/railway.schema.json",
-  "build": {
-    "builder": "NIXPACKS"
-  },
   "deploy": {
     "startCommand": "uvicorn app.main:app --host 0.0.0.0 --port $PORT",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
-  },
-  "cron": {
-    "daily-workflow": {
-      "schedule": "0 6 * * *",
-      "command": "curl -X POST https://your-app-name.railway.app/api/trigger-daily-workflow?train=true&predict=true"
-    }
   }
 }
 ```
+
+**Note:** Railway will auto-detect Python and use the appropriate build system. The `Procfile` will be used for the start command if present.
 
 Then commit and push:
 ```bash
