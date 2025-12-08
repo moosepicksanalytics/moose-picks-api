@@ -100,22 +100,36 @@ def get_latest_predictions(sport: str = "NFL", limit: int = 10):
     from app.database import SessionLocal
     from app.models.db_models import Prediction, Game
     from datetime import datetime, timedelta
+    import logging
+    
+    logger = logging.getLogger(__name__)
     
     db = SessionLocal()
     try:
         # Get unsettled predictions for this sport, ordered by most recent
-        predictions = db.query(Prediction).filter(
-            Prediction.sport == sport,
-            Prediction.settled == False
-        ).order_by(Prediction.predicted_at.desc()).limit(limit * 2).all()  # Get more to filter by edge
+        try:
+            predictions = db.query(Prediction).filter(
+                Prediction.sport == sport,
+                Prediction.settled == False
+            ).order_by(Prediction.predicted_at.desc()).limit(limit * 2).all()  # Get more to filter by edge
+        except Exception as db_error:
+            logger.warning(f"Database query failed: {db_error}. Trying CSV fallback.")
+            db.close()
+            return _get_latest_predictions_from_csv(sport, limit)
         
         if not predictions:
-            # Fallback to CSV if no database predictions
+            # No predictions in database, try CSV fallback
+            logger.info(f"No predictions found in database for {sport}. Trying CSV fallback.")
+            db.close()
             return _get_latest_predictions_from_csv(sport, limit)
         
         # Get associated games
         game_ids = [p.game_id for p in predictions]
-        games = {g.id: g for g in db.query(Game).filter(Game.id.in_(game_ids)).all()}
+        try:
+            games = {g.id: g for g in db.query(Game).filter(Game.id.in_(game_ids)).all()}
+        except Exception as game_error:
+            logger.warning(f"Error fetching games: {game_error}")
+            games = {}
         
         # Convert to dict format
         picks = []
@@ -167,32 +181,60 @@ def get_latest_predictions(sport: str = "NFL", limit: int = 10):
         }
         
     except Exception as e:
+        # Log the error for debugging
+        logger.error(f"Unexpected error in get_latest_predictions: {e}", exc_info=True)
         # If database query fails, try CSV fallback
         try:
+            db.close()
             return _get_latest_predictions_from_csv(sport, limit)
         except Exception as csv_error:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error fetching predictions: {str(e)}. CSV fallback also failed: {str(csv_error)}"
-            )
+            # If both fail, return empty result instead of 500 error
+            logger.error(f"Both database and CSV fallback failed: {csv_error}")
+            return {
+                "sport": sport,
+                "source": "none",
+                "total_predictions": 0,
+                "top_picks": [],
+                "message": f"No predictions available. Error: {str(e)}"
+            }
     finally:
-        db.close()
+        try:
+            db.close()
+        except:
+            pass
 
 
 def _get_latest_predictions_from_csv(sport: str, limit: int):
     """Fallback: Get predictions from CSV exports directory."""
     from pathlib import Path
     import pandas as pd
+    import logging
+    
+    logger = logging.getLogger(__name__)
     
     exports_dir = Path("exports")
     if not exports_dir.exists():
-        raise HTTPException(status_code=404, detail="No exports directory found and no database predictions available")
+        logger.info(f"Exports directory not found for {sport}")
+        return {
+            "sport": sport,
+            "source": "none",
+            "total_predictions": 0,
+            "top_picks": [],
+            "message": "No exports directory found and no database predictions available"
+        }
     
     # Find latest CSV for the sport
     csv_files = sorted(exports_dir.glob(f"{sport}_*.csv"), key=lambda p: p.stat().st_mtime, reverse=True)
     
     if not csv_files:
-        raise HTTPException(status_code=404, detail=f"No predictions found for {sport} (no CSV files and no database predictions)")
+        logger.info(f"No CSV files found for {sport}")
+        return {
+            "sport": sport,
+            "source": "none",
+            "total_predictions": 0,
+            "top_picks": [],
+            "message": f"No predictions found for {sport} (no CSV files and no database predictions)"
+        }
     
     latest_csv = csv_files[0]
     
@@ -200,11 +242,27 @@ def _get_latest_predictions_from_csv(sport: str, limit: int):
         df = pd.read_csv(latest_csv)
         
         if df.empty:
-            raise HTTPException(status_code=404, detail=f"CSV file {latest_csv.name} is empty")
+            logger.info(f"CSV file {latest_csv.name} is empty")
+            return {
+                "sport": sport,
+                "source": "csv",
+                "file": latest_csv.name,
+                "total_predictions": 0,
+                "top_picks": [],
+                "message": f"CSV file {latest_csv.name} is empty"
+            }
         
         # Check if 'edge' column exists
         if "edge" not in df.columns:
-            raise HTTPException(status_code=500, detail=f"CSV file {latest_csv.name} missing 'edge' column")
+            logger.warning(f"CSV file {latest_csv.name} missing 'edge' column")
+            return {
+                "sport": sport,
+                "source": "csv",
+                "file": latest_csv.name,
+                "total_predictions": 0,
+                "top_picks": [],
+                "message": f"CSV file {latest_csv.name} missing 'edge' column"
+            }
         
         # Return top picks by edge
         df_sorted = df.sort_values("edge", ascending=False).head(limit)
@@ -217,7 +275,14 @@ def _get_latest_predictions_from_csv(sport: str, limit: int):
             "top_picks": df_sorted.to_dict("records")
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error reading CSV file {latest_csv.name}: {str(e)}")
+        logger.error(f"Error reading CSV file {latest_csv.name}: {e}")
+        return {
+            "sport": sport,
+            "source": "none",
+            "total_predictions": 0,
+            "top_picks": [],
+            "message": f"Error reading CSV file {latest_csv.name}: {str(e)}"
+        }
 
 
 @router.get("/predictions/date-range")
