@@ -87,18 +87,33 @@ def parse_and_store_games(sport: str, games_data: list, only_final: bool = False
                 espn_data=event,
             )
             
-            # Upsert
+            # Upsert - check if game already exists
             existing = db.query(Game).filter(Game.id == game_id).first()
             if existing:
-                for key, val in vars(game).items():
-                    if not key.startswith("_"):
-                        setattr(existing, key, val)
+                # Update existing game
+                existing.sport = game.sport
+                existing.league = game.league
+                existing.date = game.date
+                existing.home_team = game.home_team
+                existing.away_team = game.away_team
+                existing.status = game.status
+                existing.home_moneyline = game.home_moneyline
+                existing.away_moneyline = game.away_moneyline
+                existing.spread = game.spread
+                existing.over_under = game.over_under
+                existing.home_score = game.home_score
+                existing.away_score = game.away_score
+                existing.espn_data = game.espn_data
+                existing.updated_at = datetime.utcnow()
             else:
+                # Add new game
                 db.add(game)
             
             stored_count += 1
         
         db.commit()
+        if stored_count > 0:
+            print(f"  ✓ Committed {stored_count} games to database")
         return stored_count
     except Exception as e:
         print(f"✗ Error parsing/storing games: {e}")

@@ -29,15 +29,24 @@ def fetch_todays_games(sports: list = ["NFL", "NHL", "NBA", "MLB"]):
     total_games = 0
     for sport in sports:
         print(f"Fetching {sport} games...")
-        games = fetch_games_for_date(sport, date_str)
-        if games:
-            stored = parse_and_store_games(sport, games, only_final=False)  # Store all games (including scheduled)
-            total_games += stored
-            print(f"  ✓ Stored {stored} {sport} games")
-        else:
-            print(f"  No {sport} games found for today")
+        try:
+            games = fetch_games_for_date(sport, date_str)
+            if games:
+                print(f"  Found {len(games)} {sport} games from ESPN")
+                stored = parse_and_store_games(sport, games, only_final=False)  # Store all games (including scheduled)
+                total_games += stored
+                if stored > 0:
+                    print(f"  ✓ Stored {stored} {sport} games in database")
+                else:
+                    print(f"  ⚠️  Failed to store {sport} games (check logs for errors)")
+            else:
+                print(f"  No {sport} games found for today from ESPN")
+        except Exception as e:
+            print(f"  ✗ Error fetching {sport} games: {e}")
+            import traceback
+            traceback.print_exc()
     
-    print(f"\n✓ Total games fetched: {total_games}")
+    print(f"\n✓ Total games fetched and stored: {total_games}")
     return total_games
 
 

@@ -211,8 +211,12 @@ def fetch_and_update_game_odds(
     # Update database
     db = SessionLocal()
     updated_count = 0
+    matched_games = []
+    unmatched_odds = []
     
     try:
+        print(f"  Attempting to match {len(parsed_odds)} odds entries to games...")
+        
         for odds in parsed_odds:
             # Try to match by team names and date
             game_date = None
@@ -226,38 +230,74 @@ def fetch_and_update_game_odds(
             query = db.query(Game).filter(Game.sport == sport)
             
             if game_date:
-                # Match by date (same day)
-                start_of_day = game_date.replace(hour=0, minute=0, second=0, microsecond=0)
-                end_of_day = start_of_day + timedelta(days=1)
-                query = query.filter(
-                    Game.date >= start_of_day,
-                    Game.date < end_of_day
-                )
+                # Match by date (same day) - use date-only comparison
+                from sqlalchemy import func
+                date_only = game_date.date()
+                query = query.filter(func.date(Game.date) == date_only)
             
-            # Match by team names (fuzzy match)
-            home_team = odds.get("home_team", "")
-            away_team = odds.get("away_team", "")
+            # Match by team names (fuzzy match - try multiple strategies)
+            home_team = odds.get("home_team", "").strip()
+            away_team = odds.get("away_team", "").strip()
             
+            # Strategy 1: Exact match (case insensitive)
             game = query.filter(
-                Game.home_team.ilike(f"%{home_team}%"),
-                Game.away_team.ilike(f"%{away_team}%")
+                (Game.home_team.ilike(home_team)) &
+                (Game.away_team.ilike(away_team))
             ).first()
+            
+            # Strategy 2: Contains match
+            if not game:
+                game = query.filter(
+                    (Game.home_team.ilike(f"%{home_team}%")) &
+                    (Game.away_team.ilike(f"%{away_team}%"))
+                ).first()
+            
+            # Strategy 3: Reverse match (in case teams are swapped)
+            if not game:
+                game = query.filter(
+                    (Game.home_team.ilike(f"%{away_team}%")) &
+                    (Game.away_team.ilike(f"%{home_team}%"))
+                ).first()
             
             if game:
                 # Update odds
-                if "home_moneyline" in odds:
+                updated = False
+                if "home_moneyline" in odds and odds["home_moneyline"]:
                     game.home_moneyline = odds["home_moneyline"]
-                if "away_moneyline" in odds:
+                    updated = True
+                if "away_moneyline" in odds and odds["away_moneyline"]:
                     game.away_moneyline = odds["away_moneyline"]
-                if "spread" in odds:
+                    updated = True
+                if "spread" in odds and odds["spread"]:
                     game.spread = odds["spread"]
-                if "over_under" in odds:
+                    updated = True
+                if "over_under" in odds and odds["over_under"]:
                     game.over_under = odds["over_under"]
+                    updated = True
                 
-                updated_count += 1
+                if updated:
+                    updated_count += 1
+                    matched_games.append(f"{away_team} @ {home_team}")
+            else:
+                unmatched_odds.append(f"{away_team} @ {home_team}")
         
         db.commit()
-        print(f"✓ Updated odds for {updated_count} {sport} games")
+        
+        if updated_count > 0:
+            print(f"  ✓ Updated odds for {updated_count} {sport} games")
+            if matched_games:
+                print(f"    Matched games: {', '.join(matched_games[:3])}")
+        else:
+            print(f"  ⚠️  No games matched for odds update")
+            if unmatched_odds:
+                print(f"    Unmatched odds: {', '.join(unmatched_odds[:3])}")
+                # Debug: Show what games exist in DB
+                existing_games = db.query(Game).filter(
+                    Game.sport == sport,
+                    func.date(Game.date) == datetime.now().date()
+                ).limit(5).all()
+                if existing_games:
+                    print(f"    Existing games in DB: {[f'{g.away_team} @ {g.home_team}' for g in existing_games]}")
         
     except Exception as e:
         print(f"Error updating odds: {e}")
