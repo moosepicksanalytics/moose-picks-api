@@ -2,7 +2,7 @@
 
 ## Your App is Live! 🎉
 
-Your Railway app URL should look like: `https://your-app-name.railway.app`
+Your Railway app URL: `https://moose-picks-api-production.up.railway.app`
 
 ### ⚠️ If You Can't Generate Domain (Port Issue)
 
@@ -30,10 +30,10 @@ If Railway says it can't generate a domain without knowing the port:
 
 ### 1. Check Health
 ```bash
-curl https://your-app-name.railway.app/api/health
+curl https://moose-picks-api-production.up.railway.app/api/health
 ```
 
-Or open in browser: `https://your-app-name.railway.app/api/health`
+Or open in browser: `https://moose-picks-api-production.up.railway.app/api/health`
 
 You should see:
 ```json
@@ -51,23 +51,23 @@ You should see:
 **Option A: Using curl (Terminal/PowerShell)**
 ```bash
 # Full workflow (train + predict)
-curl -X POST "https://your-app-name.railway.app/api/trigger-daily-workflow?train=true&predict=true&sports=NFL,NHL"
+curl -X POST "https://moose-picks-api-production.up.railway.app/api/trigger-daily-workflow?train=true&predict=true&sports=NFL,NHL"
 
 # Just predictions (no training)
-curl -X POST "https://your-app-name.railway.app/api/trigger-daily-workflow?train=false&predict=true"
+curl -X POST "https://moose-picks-api-production.up.railway.app/api/trigger-daily-workflow?train=false&predict=true"
 
 # Just training (no predictions)
-curl -X POST "https://your-app-name.railway.app/api/trigger-daily-workflow?train=true&predict=false"
+curl -X POST "https://moose-picks-api-production.up.railway.app/api/trigger-daily-workflow?train=true&predict=false"
 ```
 
 **Option B: Using Browser/Postman**
 - Method: `POST`
-- URL: `https://your-app-name.railway.app/api/trigger-daily-workflow?train=true&predict=true&sports=NFL,NHL`
+- URL: `https://moose-picks-api-production.up.railway.app/api/trigger-daily-workflow?train=true&predict=true&sports=NFL,NHL`
 - No body needed (all params in URL)
 
 **Option C: Using PowerShell (Windows)**
 ```powershell
-Invoke-WebRequest -Uri "https://your-app-name.railway.app/api/trigger-daily-workflow?train=true&predict=true" -Method POST
+Invoke-WebRequest -Uri "https://moose-picks-api-production.up.railway.app/api/trigger-daily-workflow?train=true&predict=true" -Method POST
 ```
 
 ### 3. Check Logs
@@ -79,10 +79,10 @@ Invoke-WebRequest -Uri "https://your-app-name.railway.app/api/trigger-daily-work
 ### 4. Check Results
 ```bash
 # Get latest predictions
-curl https://your-app-name.railway.app/api/predictions/latest?sport=NFL
+curl https://moose-picks-api-production.up.railway.app/api/predictions/latest?sport=NFL
 
 # Check health again (should show games and models)
-curl https://your-app-name.railway.app/api/health
+curl https://moose-picks-api-production.up.railway.app/api/health
 ```
 
 ---
@@ -102,7 +102,7 @@ curl https://your-app-name.railway.app/api/health
      - Or `0 10 * * *` for 10 AM UTC
    - **Command:**
      ```bash
-     curl -X POST https://your-app-name.railway.app/api/trigger-daily-workflow?train=true&predict=true&sports=NFL,NHL
+     curl -X POST https://moose-picks-api-production.up.railway.app/api/trigger-daily-workflow?train=true&predict=true&sports=NFL,NHL
      ```
    - **Environment:** Same as your main service
 
@@ -136,7 +136,7 @@ git push
 
 1. Sign up for a free cron service
 2. Create new cron job:
-   - **URL:** `https://your-app-name.railway.app/api/trigger-daily-workflow?train=true&predict=true`
+   - **URL:** `https://moose-picks-api-production.up.railway.app/api/trigger-daily-workflow?train=true&predict=true`
    - **Method:** POST
    - **Schedule:** Daily at your preferred time
    - **Timezone:** Your local timezone
@@ -161,7 +161,7 @@ When you trigger `/api/trigger-daily-workflow`, it runs:
 ### Check if Workflow is Running
 ```bash
 # Health check shows current status
-curl https://your-app-name.railway.app/api/health
+curl https://moose-picks-api-production.up.railway.app/api/health
 ```
 
 ### View Logs in Railway

@@ -1,7 +1,8 @@
 """
-Feature engineering for NFL and NHL game predictions.
+Feature engineering for NFL, NHL, NBA, and MLB game predictions.
 Builds comprehensive features including rolling stats, rest days, home/away splits, 
 head-to-head records, ATS records, betting market features, and advanced metrics.
+Supports all four major sports with sport-specific optimizations.
 """
 import pandas as pd
 import numpy as np
@@ -74,7 +75,7 @@ def calculate_multi_window_rolling_stats(
     
     Args:
         df: DataFrame with game data (must be sorted by date)
-        sport: Sport code (NFL, NHL)
+        sport: Sport code (NFL, NHL, NBA, MLB)
         rolling_windows: List of window sizes to calculate
     
     Returns:
@@ -410,10 +411,21 @@ def calculate_game_context_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     
     # Blowout threshold (sport-specific)
-    blowout_threshold = 14 if "NFL" in str(df.get("sport", "").iloc[0] if not df.empty else "") else 3
+    sport_str = str(df.get("sport", "").iloc[0] if not df.empty else "")
+    if "NFL" in sport_str or "NBA" in sport_str:
+        blowout_threshold = 14  # Football and basketball
+    elif "MLB" in sport_str:
+        blowout_threshold = 5   # Baseball
+    else:
+        blowout_threshold = 3   # Hockey
     
     # Close game threshold
-    close_threshold = 7 if "NFL" in str(df.get("sport", "").iloc[0] if not df.empty else "") else 1
+    if "NFL" in sport_str or "NBA" in sport_str:
+        close_threshold = 7
+    elif "MLB" in sport_str:
+        close_threshold = 2
+    else:
+        close_threshold = 1
     
     # Calculate for historical context (would need team history, simplified here)
     df["expected_margin"] = (
@@ -822,7 +834,7 @@ def build_features(
     
     Args:
         df: DataFrame with game data
-        sport: Sport code (NFL, NHL)
+        sport: Sport code (NFL, NHL, NBA, MLB)
         market: Market type (moneyline, spread, totals, score_projection)
         rolling_window: Number of recent games for rolling stats
         include_rest_days: Whether to include rest days feature
@@ -908,7 +920,7 @@ def get_feature_columns(sport: str, market: str) -> List[str]:
     Get list of feature column names for a sport and market.
     
     Args:
-        sport: Sport code (NFL, NHL)
+        sport: Sport code (NFL, NHL, NBA, MLB)
         market: Market type (moneyline, spread, totals, score_projection)
     
     Returns:

@@ -14,6 +14,7 @@ from scripts.export_predictions import export_predictions_for_date
 from app.espn_client.fetcher import fetch_games_for_date
 from app.espn_client.parser import parse_and_store_games
 from app.prediction.settling import settle_predictions
+from app.odds_api.client import fetch_and_update_game_odds
 
 
 def fetch_todays_games(sports: list = ["NFL", "NHL"]):
@@ -72,7 +73,7 @@ def daily_workflow(
     yesterday_str = yesterday.strftime("%Y-%m-%d")
     
     # Step 1: Settle yesterday's predictions
-    print("\n[1/4] Settling yesterday's predictions...")
+    print("\n[1/5] Settling yesterday's predictions...")
     try:
         for sport in sports:
             print(f"Settling {sport} predictions for {yesterday_str}...")
@@ -83,12 +84,28 @@ def daily_workflow(
         traceback.print_exc()
     
     # Step 2: Fetch today's games
-    print("\n[2/4] Fetching today's games...")
+    print("\n[2/5] Fetching today's games...")
     fetch_todays_games(sports)
     
-    # Step 3: Train models (if requested)
+    # Step 3: Fetch and update odds from The Odds API
+    print("\n[3/5] Fetching odds from The Odds API...")
+    try:
+        for sport in sports:
+            print(f"Fetching {sport} odds...")
+            updated = fetch_and_update_game_odds(sport, today_str)
+            if updated > 0:
+                print(f"  ✓ Updated odds for {updated} {sport} games")
+            else:
+                print(f"  No {sport} games found to update")
+    except Exception as e:
+        print(f"⚠️  Warning: Could not fetch odds: {e}")
+        print("  Continuing without odds update...")
+        import traceback
+        traceback.print_exc()
+    
+    # Step 4: Train models (if requested)
     if train:
-        print("\n[3/4] Training models...")
+        print("\n[4/5] Training models...")
         try:
             train_all_models(config_path)
             print("✓ Model training completed")
@@ -97,11 +114,11 @@ def daily_workflow(
             import traceback
             traceback.print_exc()
     else:
-        print("\n[3/4] Skipping model training (--no-train flag)")
+        print("\n[4/5] Skipping model training (--no-train flag)")
     
-    # Step 4: Generate predictions (if requested)
+    # Step 5: Generate predictions (if requested)
     if predict:
-        print("\n[4/4] Generating predictions...")
+        print("\n[5/5] Generating predictions...")
         if predict_date is None:
             predict_date = today_str
         
@@ -120,7 +137,7 @@ def daily_workflow(
                 import traceback
                 traceback.print_exc()
     else:
-        print("\n[4/4] Skipping prediction generation (--no-predict flag)")
+        print("\n[5/5] Skipping prediction generation (--no-predict flag)")
     
     print("\n" + "=" * 70)
     print("Daily workflow complete!")

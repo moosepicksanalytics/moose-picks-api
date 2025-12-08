@@ -78,10 +78,10 @@ git push
 ### Step 3: Monitor via API
 ```bash
 # Check health
-curl https://your-railway-app.railway.app/api/health
+curl https://moose-picks-api-production.up.railway.app/api/health
 
 # Trigger manual training
-curl -X POST https://your-railway-app.railway.app/api/trigger-daily-workflow
+curl -X POST https://moose-picks-api-production.up.railway.app/api/trigger-daily-workflow
 ```
 
 ## What Changed?

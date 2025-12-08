@@ -144,7 +144,7 @@ def train_model_for_market(
     Train a model for a specific sport and market.
     
     Args:
-        sport: Sport code (NFL, NHL)
+        sport: Sport code (NFL, NHL, NBA, MLB)
         market: Market type (moneyline, spread, totals, score_projection)
         config: Training configuration dict
         model_version: Version tag for model (if None, uses timestamp)
@@ -338,7 +338,7 @@ def train_score_projection_models(
     Train separate score projection models for home and away teams.
     
     Args:
-        sport: Sport code
+        sport: Sport code (NFL, NHL, NBA, MLB)
         config: Training configuration
         model_version: Version tag
     
