@@ -26,7 +26,7 @@ def train_all_models(config_path: str = "config.yaml"):
     # Get sports from config or settings
     sports = list(config.get("training_seasons", {}).keys())
     if not sports:
-        sports = ["NFL", "NHL"]  # Default
+        sports = ["NFL", "NHL", "NBA", "MLB"]  # Default to all 4 sports
     
     markets = ["moneyline", "spread", "totals"]
     

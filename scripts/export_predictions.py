@@ -431,7 +431,7 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="Export predictions for upcoming games")
-    parser.add_argument("--sport", type=str, required=True, help="Sport code (NFL, NHL)")
+    parser.add_argument("--sport", type=str, required=True, help="Sport code (NFL, NHL, NBA, MLB)")
     parser.add_argument("--date", type=str, required=True, help="Date in YYYY-MM-DD format")
     parser.add_argument("--config", type=str, default="config.yaml", help="Path to config.yaml")
     parser.add_argument("--output-dir", type=str, default="exports", help="Output directory")

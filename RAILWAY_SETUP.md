@@ -67,8 +67,17 @@ curl -X POST "https://moose-picks-api-production.up.railway.app/api/trigger-dail
 
 **Option C: Using PowerShell (Windows)**
 ```powershell
+# IMPORTANT: Always quote the URL in PowerShell to handle & characters
 Invoke-WebRequest -Uri "https://moose-picks-api-production.up.railway.app/api/trigger-daily-workflow?train=true&predict=true" -Method POST
+
+# Or use Invoke-RestMethod (returns JSON directly)
+Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/trigger-daily-workflow?train=false&predict=true" -Method POST
+
+# For testing (just fetch odds, no training/predictions)
+Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/trigger-daily-workflow?train=false&predict=false" -Method POST
 ```
+
+**⚠️ PowerShell Tip:** Always wrap URLs with `&` in quotes, or PowerShell will try to execute `&` as a command separator!
 
 ### 3. Check Logs
 - Go to Railway dashboard

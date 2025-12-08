@@ -17,7 +17,7 @@ from app.prediction.settling import settle_predictions
 from app.odds_api.client import fetch_and_update_game_odds
 
 
-def fetch_todays_games(sports: list = ["NFL", "NHL"]):
+def fetch_todays_games(sports: list = ["NFL", "NHL", "NBA", "MLB"]):
     """Fetch and store today's games from ESPN."""
     today = datetime.now()
     date_str = today.strftime("%Y-%m-%d")
@@ -42,7 +42,7 @@ def fetch_todays_games(sports: list = ["NFL", "NHL"]):
 
 
 def daily_workflow(
-    sports: list = ["NFL", "NHL"],
+    sports: list = ["NFL", "NHL", "NBA", "MLB"],
     train: bool = True,
     predict: bool = True,
     predict_date: str = None,
@@ -171,8 +171,8 @@ Examples:
         "--sports",
         type=str,
         nargs="+",
-        default=["NFL", "NHL"],
-        help="Sports to process (default: NFL NHL)"
+        default=["NFL", "NHL", "NBA", "MLB"],
+        help="Sports to process (default: NFL NHL NBA MLB)"
     )
     parser.add_argument(
         "--no-train",
