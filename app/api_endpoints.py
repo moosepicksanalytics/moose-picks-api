@@ -9,6 +9,75 @@ import asyncio
 router = APIRouter()
 
 
+@router.post("/backfill")
+def trigger_backfill(
+    background_tasks: BackgroundTasks,
+    sports: Optional[str] = None,
+    seasons: Optional[str] = None,
+    delay: float = 0.1
+):
+    """
+    Trigger historical data backfill from API.
+    This endpoint can be called via HTTP POST to backfill historical game data.
+    
+    Args:
+        sports: Comma-separated list of sports (e.g., "NFL,NHL") - default: all 4 sports
+        seasons: Comma-separated list of season years (e.g., "2023,2024") - default: past 5 seasons
+        delay: Delay between API calls in seconds (default: 0.1)
+    
+    Returns:
+        Status message
+    """
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from scripts.backfill_historical_data import backfill_sport, backfill_all_sports
+    from datetime import datetime
+    
+    # Parse sports
+    if sports:
+        sports_list = [s.strip().upper() for s in sports.split(",")]
+    else:
+        sports_list = ["NFL", "NHL", "NBA", "MLB"]
+    
+    # Parse seasons
+    if seasons:
+        seasons_list = [int(s.strip()) for s in seasons.split(",")]
+    else:
+        # Default: past 5 seasons
+        current_year = datetime.now().year
+        seasons_list = list(range(current_year - 4, current_year + 1))
+    
+    def run_backfill():
+        try:
+            if len(sports_list) == 4 and sports_list == ["NFL", "NHL", "NBA", "MLB"]:
+                # All sports
+                backfill_all_sports(seasons=seasons_list, delay=delay)
+            else:
+                # Specific sports
+                total = 0
+                for sport in sports_list:
+                    games = backfill_sport(sport, seasons_list, delay=delay)
+                    total += games
+                print(f"\n✓ Total across all sports: {total} games")
+        except Exception as e:
+            print(f"Error in backfill: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    # Run in background
+    background_tasks.add_task(run_backfill)
+    
+    return {
+        "status": "started",
+        "message": "Backfill started in background",
+        "sports": sports_list,
+        "seasons": seasons_list,
+        "delay": delay,
+        "note": "Check Railway logs to monitor progress"
+    }
+
+
 @router.post("/trigger-daily-workflow")
 def trigger_daily_workflow(
     background_tasks: BackgroundTasks,
