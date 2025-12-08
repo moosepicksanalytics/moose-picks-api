@@ -439,17 +439,33 @@ def export_predictions_for_date(
             print(f"  Sample game teams: {[f'{g.away_team} @ {g.home_team}' for g in all_games[:3]]}")
         
         # Filter for games that are not final (scheduled or in progress)
-        games = [
-            g for g in all_games 
-            if g.status and g.status.lower() not in ["final", "completed", "finished"]
-        ]
+        # Also check if games have scores - if no scores, they can't be final
+        games = []
+        for g in all_games:
+            # Game is not final if:
+            # 1. Status is not "final" AND
+            # 2. Either no scores OR status is explicitly scheduled/in_progress
+            is_final = (
+                g.status and 
+                g.status.lower() in ["final", "completed", "finished"] and
+                g.home_score is not None and 
+                g.away_score is not None
+            )
+            if not is_final:
+                games.append(g)
         
         if not games:
             print(f"No scheduled/in-progress games found for {sport} on {date_str}")
             print(f"  Found {len(all_games)} total games, but all are final/completed")
             if all_games:
                 print(f"  Game statuses: {[g.status for g in all_games[:5]]}")
+                print(f"  Game scores: {[f'{g.away_score}-{g.home_score}' if g.home_score is not None else 'no scores' for g in all_games[:5]]}")
                 print(f"  All game IDs: {[g.id for g in all_games[:5]]}")
+                
+                # Debug: Check if games might be misclassified
+                misclassified = [g for g in all_games if g.status == "final" and (g.home_score is None or g.away_score is None)]
+                if misclassified:
+                    print(f"  ⚠️  Found {len(misclassified)} games marked 'final' but have no scores (likely misclassified)")
             return
         
         print(f"Found {len(games)} games for {sport} on {date_str}")

@@ -34,19 +34,37 @@ def parse_and_store_games(sport: str, games_data: list, only_final: bool = False
             
             # Extract status and normalize
             status_raw = event.get("status", {}).get("type", {}).get("name", "")
-            # Normalize ESPN status values: "STATUS_FINAL" -> "final", etc.
-            if "FINAL" in status_raw.upper():
-                status = "final"
-            elif "SCHEDULED" in status_raw.upper():
-                status = "scheduled"
-            elif "IN_PROGRESS" in status_raw.upper() or "LIVE" in status_raw.upper():
-                status = "in_progress"
-            else:
-                status = status_raw.lower() if status_raw else "scheduled"
+            status_raw_upper = status_raw.upper() if status_raw else ""
             
-            # Get scores
+            # Get scores first (needed to determine if game is actually final)
             home_score = int(home.get("score", 0)) if home.get("score") is not None else None
             away_score = int(away.get("score", 0)) if away.get("score") is not None else None
+            
+            # Normalize ESPN status values
+            # Only mark as "final" if explicitly final AND has scores
+            if status_raw_upper == "STATUS_FINAL" or status_raw_upper == "FINAL":
+                # Only mark as final if game has scores
+                if home_score is not None and away_score is not None:
+                    status = "final"
+                else:
+                    # Has final status but no scores - might be data issue, treat as scheduled
+                    status = "scheduled"
+                    if stored_count < 3:  # Only log first few for debugging
+                        print(f"    Warning: Game {game_id} marked FINAL but has no scores, treating as scheduled")
+            elif "SCHEDULED" in status_raw_upper or status_raw_upper == "":
+                status = "scheduled"
+            elif "IN_PROGRESS" in status_raw_upper or "LIVE" in status_raw_upper or "IN PROGRESS" in status_raw_upper:
+                status = "in_progress"
+            elif "POSTPONED" in status_raw_upper or "DELAYED" in status_raw_upper:
+                status = "scheduled"  # Treat postponed/delayed as scheduled
+            else:
+                # Unknown status - default to scheduled if no scores, final if has scores
+                if home_score is not None and away_score is not None:
+                    status = "final"  # Has scores, probably finished
+                else:
+                    status = "scheduled"  # No scores, probably not started
+                if stored_count < 3:  # Only log first few for debugging
+                    print(f"    Info: Game {game_id} has unknown status '{status_raw}', defaulting to '{status}' (scores: {home_score}-{away_score})")
             
             # If only_final is True, skip games without final scores
             if only_final and (status != "final" or home_score is None or away_score is None):
