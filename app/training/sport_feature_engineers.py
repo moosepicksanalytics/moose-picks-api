@@ -186,28 +186,15 @@ class NHLFeatureEngineer(BaseFeatureEngineer):
                 except:
                     pass
             
-            # Estimate goalie stats from scores (simplified)
-            if has_scores:
-                # Estimate save % based on goals against
-                # Lower goals against = better save %
-                home_goals_against = away_score
-                away_goals_against = home_score
-                
-                # Estimate shots (NHL average ~30 shots per game)
-                estimated_shots = 30.0
-                
-                if estimated_shots > 0:
-                    df.at[idx, "home_goalie_save_pct"] = max(0.7, min(0.98, 1 - (home_goals_against / estimated_shots)))
-                    df.at[idx, "away_goalie_save_pct"] = max(0.7, min(0.98, 1 - (away_goals_against / estimated_shots)))
-                
-                df.at[idx, "home_goalie_gaa"] = home_goals_against
-                df.at[idx, "away_goalie_gaa"] = away_goals_against
-                
-                # REMOVED: Corsi estimation using current game outcome
-                # This was data leakage - using home_score > away_score directly encodes the target
-                # Corsi should be calculated from past games only, not the current game
-                # For now, keep default values (0.5) - in future, calculate from historical shot data
-                pass  # Keep default 0.5 values set above
+            # REMOVED: Goalie stats estimation using current game scores
+            # This was data leakage - using away_score and home_score directly encodes the target
+            # If home won, home_goalie_gaa is lower (better), away_goalie_gaa is higher (worse)
+            # This allows the model to perfectly predict the outcome
+            # Keep default values (set above) - in future, calculate from historical data only
+            # REMOVED: home_goalie_save_pct, away_goalie_save_pct calculated from current game scores
+            # REMOVED: home_goalie_gaa, away_goalie_gaa set to current game scores
+            # REMOVED: Corsi estimation using current game outcome
+            pass  # Keep default values set above
         
         # Calculate rolling NHL-specific stats
         for window in self.rolling_windows:
@@ -290,33 +277,15 @@ class NBAFeatureEngineer(BaseFeatureEngineer):
             if (home_east and away_east) or (not home_east and not away_east):
                 df.at[idx, "conference_matchup"] = 1
         
-        # Estimate NBA-specific stats from scores
-        for idx, row in df.iterrows():
-            home_score = row["home_score"]
-            away_score = row["away_score"]
-            has_scores = pd.notna(home_score) and pd.notna(away_score)
-            
-            if has_scores:
-                # Estimate pace (higher scoring = higher pace)
-                total_score = home_score + away_score
-                df.at[idx, "home_pace"] = min(120, max(80, total_score / 2.0))
-                df.at[idx, "away_pace"] = df.at[idx, "home_pace"]
-                
-                # Estimate eFG% (higher scoring = better shooting)
-                # NBA average ~110 points, ~54% eFG
-                if total_score > 220:
-                    efg_boost = 0.02
-                elif total_score < 200:
-                    efg_boost = -0.02
-                else:
-                    efg_boost = 0
-                
-                df.at[idx, "home_efg_pct"] = 0.54 + efg_boost if home_score > away_score else 0.54 - efg_boost
-                df.at[idx, "away_efg_pct"] = 0.54 + efg_boost if away_score > home_score else 0.54 - efg_boost
-                
-                # Estimate true shooting % (similar to eFG%)
-                df.at[idx, "home_true_shooting_pct"] = df.at[idx, "home_efg_pct"] + 0.03
-                df.at[idx, "away_true_shooting_pct"] = df.at[idx, "away_efg_pct"] + 0.03
+        # REMOVED: NBA-specific stats estimation using current game scores
+        # This was data leakage - using home_score > away_score directly encodes the target
+        # Line 314: home_efg_pct = 0.54 + efg_boost if home_score > away_score else 0.54 - efg_boost
+        # This allows the model to perfectly predict the outcome (if home_efg_pct > away_efg_pct, home wins)
+        # Keep default values (set above) - in future, calculate from historical data only
+        # REMOVED: home_pace, away_pace calculated from current game total_score
+        # REMOVED: home_efg_pct, away_efg_pct calculated using home_score > away_score (direct leakage!)
+        # REMOVED: home_true_shooting_pct, away_true_shooting_pct derived from efg_pct
+        pass  # Keep default values set above
         
         # Calculate rolling NBA-specific stats
         for window in self.rolling_windows:
@@ -379,34 +348,17 @@ class MLBFeatureEngineer(BaseFeatureEngineer):
             if game_date.hour < 18:
                 df.at[idx, "day_game"] = 1
         
-        # Estimate pitcher stats from runs allowed
-        for idx, row in df.iterrows():
-            home_score = row["home_score"]
-            away_score = row["away_score"]
-            has_scores = pd.notna(home_score) and pd.notna(away_score)
-            
-            if has_scores:
-                # Estimate pitcher ERA from runs allowed
-                # Lower runs = better ERA
-                df.at[idx, "away_pitcher_era"] = max(2.0, min(6.0, away_score * 0.8))
-                df.at[idx, "home_pitcher_era"] = max(2.0, min(6.0, home_score * 0.8))
-                
-                # Estimate WHIP (walks + hits per inning)
-                # Correlates with runs allowed
-                df.at[idx, "away_pitcher_whip"] = max(0.8, min(1.8, df.at[idx, "away_pitcher_era"] / 3.0))
-                df.at[idx, "home_pitcher_whip"] = max(0.8, min(1.8, df.at[idx, "home_pitcher_era"] / 3.0))
-                
-                # Estimate OPS from runs scored
-                # Higher runs = better OPS
-                if home_score > 0:
-                    df.at[idx, "home_ops"] = min(1.0, max(0.5, 0.73 + (home_score - 4.5) * 0.05))
-                if away_score > 0:
-                    df.at[idx, "away_ops"] = min(1.0, max(0.5, 0.73 + (away_score - 4.5) * 0.05))
-                
-                # Estimate HR rate
-                # Higher scoring = more HRs
-                df.at[idx, "home_hr_rate"] = min(0.06, max(0.01, 0.03 + (home_score - 4.5) * 0.002))
-                df.at[idx, "away_hr_rate"] = min(0.06, max(0.01, 0.03 + (away_score - 4.5) * 0.002))
+        # REMOVED: Pitcher and batter stats estimation using current game scores
+        # This was data leakage - using home_score and away_score directly encodes the target
+        # If home won, home_pitcher_era is lower (better), away_pitcher_era is higher (worse)
+        # If home won, home_ops is higher (better), away_ops is lower (worse)
+        # This allows the model to perfectly predict the outcome
+        # Keep default values (set above) - in future, calculate from historical data only
+        # REMOVED: away_pitcher_era, home_pitcher_era calculated from away_score, home_score (current game)
+        # REMOVED: away_pitcher_whip, home_pitcher_whip derived from ERA (which uses current game scores)
+        # REMOVED: home_ops, away_ops calculated from home_score, away_score (current game)
+        # REMOVED: home_hr_rate, away_hr_rate calculated from home_score, away_score (current game)
+        pass  # Keep default values set above
         
         # Calculate rolling MLB-specific stats
         for window in self.rolling_windows:

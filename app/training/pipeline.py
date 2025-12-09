@@ -222,31 +222,30 @@ def prepare_labels(df: pd.DataFrame, sport: str, market: str) -> pd.Series:
     
     elif market == "totals":
         # 1 if over, 0 if under
-        if "over_under" not in df.columns or df["over_under"].isna().all():
-            # Estimate total from averages - use windowed version (default is 10)
-            # Try different window sizes, starting with the default
-            home_col = None
-            away_col = None
-            for window in [10, 15, 5, 3]:  # Try most common windows first
-                if f"home_points_for_avg_{window}" in df.columns:
-                    home_col = f"home_points_for_avg_{window}"
-                    away_col = f"away_points_for_avg_{window}"
-                    break
-            
-            if home_col and away_col:
-                total = df[home_col].fillna(0) + df[away_col].fillna(0)
-            else:
-                # Fallback: use actual scores if available, otherwise default to 0
-                # This should rarely happen if features were built correctly
-                total = pd.Series([0] * len(df))
-                if "home_score" in df.columns and "away_score" in df.columns:
-                    # Use a simple average if we have some score data
-                    avg_home = df["home_score"].mean() if not df["home_score"].isna().all() else 0
-                    avg_away = df["away_score"].mean() if not df["away_score"].isna().all() else 0
-                    total = pd.Series([avg_home + avg_away] * len(df))
-        else:
-            total = df["over_under"]
-        return (df["home_score"] + df["away_score"] > total).astype(int)
+        # Only use games with actual over_under data (don't estimate)
+        if "over_under" not in df.columns:
+            print("  ⚠️  Warning: No over_under column found, cannot train totals model")
+            return pd.Series([np.nan] * len(df), index=df.index)
+        
+        over_under_clean = df["over_under"].copy()
+        null_count = over_under_clean.isna().sum()
+        total_count = len(df)
+        
+        if null_count == total_count:
+            # All over_under values are null - can't train
+            print(f"  ⚠️  Warning: All {total_count} games have null over_under, cannot train totals model")
+            return pd.Series([np.nan] * total_count, index=df.index)
+        
+        # For games with null over_under, return NaN so they get filtered out
+        if null_count > 0:
+            print(f"  ⚠️  Warning: {null_count}/{total_count} games have null over_under (will be excluded)")
+        
+        # Calculate labels: 1 if over, 0 if under
+        # Return NaN for games with null over_under
+        result = pd.Series([np.nan] * len(df), index=df.index, dtype=float)
+        valid_mask = over_under_clean.notna()
+        result[valid_mask] = (df.loc[valid_mask, "home_score"] + df.loc[valid_mask, "away_score"] > over_under_clean[valid_mask]).astype(int)
+        return result
     
     else:
         raise ValueError(f"Unknown market type: {market}")
@@ -464,6 +463,15 @@ def train_model_for_market(
                 "reg_alpha": 1.0,
                 "reg_lambda": 1.0,
             })
+        
+        # Check for class imbalance before training
+        unique_classes = np.unique(y_train)
+        if len(unique_classes) < 2:
+            error_msg = f"Invalid classes in training data. Expected at least 2 classes, got: {unique_classes}. "
+            error_msg += f"This usually means all labels are the same (all {unique_classes[0]}). "
+            error_msg += f"Check label preparation and data filtering. "
+            error_msg += f"Training samples: {len(y_train)}, Class distribution: {dict(zip(*np.unique(y_train, return_counts=True)))}"
+            return {"success": False, "error": error_msg}
         
         model = ModelClass(**model_params)
         model.fit(X_train_scaled, y_train)
