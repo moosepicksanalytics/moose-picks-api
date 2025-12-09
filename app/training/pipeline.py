@@ -347,11 +347,26 @@ def train_model_for_market(
     
     # Remove rows with NaN in features or labels
     mask = ~(X.isna().any(axis=1) | y.isna())
+    
+    # Debug: Log why samples are being filtered
+    total_samples = len(X)
+    nan_labels = y.isna().sum()
+    nan_features = X.isna().any(axis=1).sum()
+    valid_samples = mask.sum()
+    
+    if nan_labels > 0:
+        print(f"  ⚠️  {nan_labels}/{total_samples} samples have NaN labels (will be excluded)")
+    if nan_features > 0:
+        print(f"  ⚠️  {nan_features}/{total_samples} samples have NaN features (will be excluded)")
+    if valid_samples < total_samples:
+        print(f"  ⚠️  Filtering: {total_samples} -> {valid_samples} valid samples")
+    
     X = X[mask]
     y = y[mask]
     
     if len(X) == 0:
-        return {"success": False, "error": "No valid samples after cleaning"}
+        error_msg = f"No valid samples after cleaning (total: {total_samples}, NaN labels: {nan_labels}, NaN features: {nan_features})"
+        return {"success": False, "error": error_msg}
     
     # Train/validation split
     split_strategy = config.get("split_strategy", "season")

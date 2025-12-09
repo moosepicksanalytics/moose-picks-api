@@ -78,6 +78,97 @@ def trigger_backfill(
     }
 
 
+@router.post("/backfill-odds")
+def trigger_backfill_odds(
+    background_tasks: BackgroundTasks,
+    sport: Optional[str] = None,
+    start_date: str = None,
+    end_date: str = None,
+    dry_run: bool = False
+):
+    """
+    Backfill historical odds data for games in the database.
+    
+    ⚠️  COST WARNING: Historical odds cost 30 credits per date (10x more than current odds).
+    With 20k credits/month, you can backfill ~666 dates.
+    
+    Args:
+        sport: Sport code (NFL, NHL, NBA, MLB) - if not provided, backfills all sports
+        start_date: Start date in YYYY-MM-DD format (required)
+        end_date: End date in YYYY-MM-DD format (required)
+        dry_run: If True, only report what would be done (no API calls)
+    
+    Returns:
+        Status message with cost estimate
+    
+    Example:
+        POST /api/backfill-odds?sport=NFL&start_date=2024-10-01&end_date=2024-10-31
+    """
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from scripts.backfill_odds import backfill_odds_for_date_range, backfill_all_sports
+    
+    if not start_date or not end_date:
+        raise HTTPException(
+            status_code=400,
+            detail="start_date and end_date are required (YYYY-MM-DD format)"
+        )
+    
+    def run_backfill():
+        try:
+            if sport:
+                result = backfill_odds_for_date_range(
+                    sport=sport.upper(),
+                    start_date=start_date,
+                    end_date=end_date,
+                    dry_run=dry_run,
+                    use_historical=True
+                )
+            else:
+                result = backfill_all_sports(
+                    start_date=start_date,
+                    end_date=end_date,
+                    dry_run=dry_run,
+                    use_historical=True
+                )
+            print(f"\n✓ Backfill completed: {result}")
+        except Exception as e:
+            print(f"Error in odds backfill: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    # Run in background
+    background_tasks.add_task(run_backfill)
+    
+    # Estimate cost
+    from datetime import datetime
+    try:
+        start = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end = datetime.strptime(end_date, "%Y-%m-%d").date()
+        days = (end - start).days + 1
+        cost_per_date = 30  # 3 markets × 1 region × 10 credits
+        estimated_cost = days * cost_per_date
+        if sport:
+            total_cost = estimated_cost
+        else:
+            total_cost = estimated_cost * 4  # All 4 sports
+    except:
+        estimated_cost = None
+        total_cost = None
+    
+    return {
+        "status": "started",
+        "message": "Odds backfill started in background",
+        "sport": sport or "all",
+        "start_date": start_date,
+        "end_date": end_date,
+        "dry_run": dry_run,
+        "estimated_cost_credits": total_cost if total_cost else "unknown",
+        "note": "Check Railway logs to monitor progress. Historical odds cost 30 credits per date."
+    }
+
+
 @router.post("/trigger-daily-workflow")
 def trigger_daily_workflow(
     background_tasks: BackgroundTasks,

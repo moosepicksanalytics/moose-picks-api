@@ -14,7 +14,12 @@ from sklearn.metrics import (
     mean_absolute_error,
 )
 from sklearn.calibration import calibration_curve
-import matplotlib.pyplot as plt
+try:
+    import matplotlib.pyplot as plt
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    MATPLOTLIB_AVAILABLE = False
+    plt = None
 
 
 def evaluate_classification_model(
@@ -247,6 +252,10 @@ def plot_calibration_curve(
         n_bins: Number of bins for calibration
         save_path: Optional path to save the plot
     """
+    if not MATPLOTLIB_AVAILABLE:
+        print("⚠️  Matplotlib not available. Skipping calibration plot.")
+        print("   Install with: pip install matplotlib")
+        return
     mask = ~(pd.isna(y_true) | pd.isna(y_pred_proba))
     y_true_clean = y_true[mask].values
     y_pred_proba_clean = y_pred_proba[mask].values

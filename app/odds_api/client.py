@@ -104,6 +104,97 @@ def fetch_odds_for_sport(
         return []
 
 
+def fetch_historical_odds_for_sport(
+    sport: str,
+    date: str,
+    markets: Optional[List[str]] = None
+) -> List[Dict]:
+    """
+    Fetch historical odds from The Odds API for a sport and date.
+    
+    Historical odds are available from June 6th 2020, with snapshots at 5-10 minute intervals.
+    This endpoint costs 10 credits per region per market (vs 1 for current odds).
+    Only available on paid usage plans.
+    
+    Args:
+        sport: Sport code (NFL, NHL, NBA, MLB)
+        date: Date in YYYY-MM-DD format, or ISO8601 timestamp (e.g., "2021-10-18T12:00:00Z")
+        markets: List of markets to fetch (default: ["h2h", "spreads", "totals"])
+    
+    Returns:
+        List of game odds data (from the "data" field in the response)
+    """
+    if not settings.ODDS_API_KEY:
+        print("Warning: ODDS_API_KEY not set. Cannot fetch historical odds from The Odds API.")
+        return []
+    
+    sport_key = ODDS_API_SPORT_KEYS.get(sport)
+    if not sport_key:
+        print(f"Warning: Sport {sport} not supported by The Odds API")
+        return []
+    
+    # Default markets
+    if markets is None:
+        markets = ["h2h", "spreads", "totals"]
+    
+    # Format date as ISO8601 timestamp
+    # If date is YYYY-MM-DD, use noon UTC for that date
+    # If date is already ISO8601, use it as-is
+    try:
+        if "T" in date:
+            # Already ISO8601 format
+            date_param = date
+        else:
+            # YYYY-MM-DD format, convert to ISO8601 at noon UTC
+            date_obj = datetime.strptime(date, "%Y-%m-%d")
+            date_param = date_obj.strftime("%Y-%m-%dT12:00:00Z")
+    except ValueError:
+        print(f"Invalid date format: {date}. Use YYYY-MM-DD or ISO8601 (e.g., 2021-10-18T12:00:00Z)")
+        return []
+    
+    # The Odds API historical endpoint
+    url = f"https://api.the-odds-api.com/v4/historical/sports/{sport_key}/odds"
+    
+    params = {
+        "apiKey": settings.ODDS_API_KEY,
+        "regions": ODDS_API_REGION,
+        "markets": ",".join(markets),
+        "date": date_param,
+        "dateFormat": "iso",
+        "oddsFormat": "american",  # Use American odds format
+    }
+    
+    try:
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        result = response.json()
+        
+        # Historical API returns data wrapped in a structure with timestamp info
+        # Extract the actual data array
+        if isinstance(result, dict) and "data" in result:
+            data = result["data"]
+            timestamp = result.get("timestamp", "unknown")
+            print(f"  Historical snapshot timestamp: {timestamp}")
+        else:
+            # Fallback: assume it's already the data array
+            data = result
+        
+        # Log API usage (historical costs 10x more)
+        remaining = response.headers.get("x-requests-remaining", "unknown")
+        used = response.headers.get("x-requests-used", "unknown")
+        last_cost = response.headers.get("x-requests-last", "unknown")
+        print(f"  The Odds API (Historical): {used} used, {remaining} remaining, last call cost: {last_cost}")
+        
+        return data
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching historical odds from The Odds API: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            print(f"Response: {e.response.text}")
+            if e.response.status_code == 402:
+                print("  ⚠️  Historical odds require a paid plan. Upgrade your API plan to use this feature.")
+        return []
+
+
 def parse_odds_data(odds_data: List[Dict], sport: str) -> List[Dict]:
     """
     Parse The Odds API response into our format.
@@ -181,6 +272,126 @@ def parse_odds_data(odds_data: List[Dict], sport: str) -> List[Dict]:
         parsed.append(odds_dict)
     
     return parsed
+
+
+def fetch_and_update_game_odds_historical(
+    sport: str,
+    date: str
+) -> int:
+    """
+    Fetch historical odds from The Odds API and update games in database.
+    
+    Args:
+        sport: Sport code
+        date: Date in YYYY-MM-DD format or ISO8601 timestamp
+    
+    Returns:
+        Number of games updated
+    """
+    from app.database import SessionLocal
+    from app.models.db_models import Game
+    
+    # Fetch historical odds
+    odds_data = fetch_historical_odds_for_sport(sport, date)
+    if not odds_data:
+        return 0
+    
+    # Parse odds (same parser works for historical data)
+    parsed_odds = parse_odds_data(odds_data, sport)
+    
+    # Update database (same matching logic)
+    db = SessionLocal()
+    updated_count = 0
+    matched_games = []
+    unmatched_odds = []
+    
+    try:
+        print(f"  Attempting to match {len(parsed_odds)} historical odds entries to games...")
+        
+        for odds in parsed_odds:
+            # Try to match by team names and date
+            game_date = None
+            if odds.get("commence_time"):
+                try:
+                    game_date = datetime.fromisoformat(odds["commence_time"].replace("Z", "+00:00"))
+                except:
+                    pass
+            
+            # Find matching game
+            query = db.query(Game).filter(Game.sport == sport)
+            
+            if game_date:
+                # Match by date (same day) - use date-only comparison
+                from sqlalchemy import func
+                date_only = game_date.date()
+                query = query.filter(func.date(Game.date) == date_only)
+            
+            # Match by team names (fuzzy match - try multiple strategies)
+            home_team = odds.get("home_team", "").strip()
+            away_team = odds.get("away_team", "").strip()
+            
+            # Strategy 1: Exact match (case insensitive)
+            game = query.filter(
+                (Game.home_team.ilike(home_team)) &
+                (Game.away_team.ilike(away_team))
+            ).first()
+            
+            # Strategy 2: Contains match
+            if not game:
+                game = query.filter(
+                    (Game.home_team.ilike(f"%{home_team}%")) &
+                    (Game.away_team.ilike(f"%{away_team}%"))
+                ).first()
+            
+            # Strategy 3: Reverse match (in case teams are swapped)
+            if not game:
+                game = query.filter(
+                    (Game.home_team.ilike(f"%{away_team}%")) &
+                    (Game.away_team.ilike(f"%{home_team}%"))
+                ).first()
+            
+            if game:
+                # Update odds
+                updated = False
+                if "home_moneyline" in odds and odds["home_moneyline"]:
+                    game.home_moneyline = odds["home_moneyline"]
+                    updated = True
+                if "away_moneyline" in odds and odds["away_moneyline"]:
+                    game.away_moneyline = odds["away_moneyline"]
+                    updated = True
+                if "spread" in odds and odds["spread"]:
+                    game.spread = odds["spread"]
+                    updated = True
+                if "over_under" in odds and odds["over_under"]:
+                    game.over_under = odds["over_under"]
+                    updated = True
+                
+                if updated:
+                    updated_count += 1
+                    matched_games.append(f"{away_team} @ {home_team}")
+            else:
+                unmatched_odds.append(f"{away_team} @ {home_team}")
+        
+        db.commit()
+        
+        if updated_count > 0:
+            print(f"  ✓ Updated odds for {updated_count} {sport} games")
+            if matched_games:
+                print(f"    Matched games: {', '.join(matched_games[:3])}")
+        else:
+            print(f"  ⚠️  No games matched for odds update")
+            if unmatched_odds:
+                print(f"    Unmatched odds: {', '.join(unmatched_odds[:3])}")
+        
+    except Exception as e:
+        print(f"Error updating historical odds: {e}")
+        import traceback
+        traceback.print_exc()
+        db.rollback()
+    finally:
+        db.close()
+    
+    return updated_count
 
 
 def fetch_and_update_game_odds(
