@@ -98,9 +98,12 @@ def prepare_labels(df: pd.DataFrame, sport: str, market: str) -> pd.Series:
     elif market == "spread":
         # 1 if home covers spread, 0 otherwise
         if "spread" not in df.columns or df["spread"].isna().all():
-            # If no spread data, use point differential
-            return (df["home_score"] - df["away_score"] > 0).astype(int)
-        return (df["home_score"] - df["away_score"] > df["spread"]).astype(int)
+            # If no spread data, return NaN (exclude from training)
+            # Don't use point differential as fallback - that causes data leakage
+            return pd.Series([np.nan] * len(df), index=df.index)
+        # Handle individual NaN spreads - exclude those rows
+        spread_clean = df["spread"].fillna(np.nan)  # Keep NaN, don't fill with 0
+        return (df["home_score"] - df["away_score"] > spread_clean).astype(float)  # Use float to preserve NaN
     
     elif market == "totals":
         # 1 if over, 0 if under
@@ -205,6 +208,16 @@ def train_model_for_market(
     
     if not available_cols:
         return {"success": False, "error": "No features available"}
+    
+    # Debug: Log features being used (especially for spread/moneyline to check for data leakage)
+    if market in ["spread", "moneyline"]:
+        print(f"DEBUG: Using {len(available_cols)} features for {sport} {market}")
+        # Check for problematic features
+        problematic = [f for f in available_cols if any(x in f.lower() for x in ['point_diff', 'strength', 'opponent_strength', 'margin', 'edge', 'cover_prob', 'won', 'win_rate'])]
+        if problematic:
+            print(f"WARNING: Potentially problematic features found: {problematic[:20]}")
+        # Show first 20 features being used
+        print(f"DEBUG: First 20 features: {available_cols[:20]}")
     
     X = df[available_cols].copy()
     

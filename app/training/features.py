@@ -990,7 +990,9 @@ def get_feature_columns(sport: str, market: str) -> List[str]:
             if market != "spread":
                 features_to_add.append(f"{prefix}_point_diff_avg_{window}")
             base_features.extend(features_to_add)
-            if window >= 4:
+            # REMOVED for spread market: momentum uses point differential (recent_avg - older_avg)
+            # which can allow edge reconstruction
+            if window >= 4 and market != "spread":
                 base_features.append(f"{prefix}_momentum_{window}")
     
     # Rest days
@@ -1050,10 +1052,16 @@ def get_feature_columns(sport: str, market: str) -> List[str]:
     base_features.extend(h2h_features)
     
     # Opponent-adjusted
-    base_features.extend([
-        "home_opponent_strength",
-        "away_opponent_strength",
-    ])
+    # REMOVED for spread market: opponent_strength uses point_diff_avg
+    # Model can reconstruct edge: away_opponent_strength - home_opponent_strength = strength_diff
+    if market == "spread":
+        # Skip opponent_strength for spread (uses point differential)
+        pass
+    else:
+        base_features.extend([
+            "home_opponent_strength",
+            "away_opponent_strength",
+        ])
     
     # Betting market features
     base_features.extend([
