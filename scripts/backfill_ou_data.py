@@ -279,16 +279,26 @@ def validate_ou_coverage(sport: str, min_games: int = 100):
             ).scalar()
             logger.warning(f"  Games with non-empty ou_result: {total_with_result}")
         
+        # Ensure distribution is a proper dict, not None
+        if distribution is None:
+            distribution = {}
+        
+        # Log what we found from the query
+        logger.info(f"Distribution query returned {len(distribution_query)} rows")
+        if distribution_query:
+            logger.info(f"Sample query results: {[(str(r[0]), r[1]) for r in distribution_query[:5]]}")
+        
         coverage = {
             'sport': sport,
             'total_completed': int(total_games) if total_games else 0,
             'with_ou_data': int(games_with_ou) if games_with_ou else 0,
             'coverage_pct': round((games_with_ou / total_games * 100) if total_games > 0 else 0, 2),
-            'distribution': distribution,
+            'distribution': distribution,  # This should be a dict with OVER/UNDER/PUSH counts
             'can_train': games_with_ou >= min_games if games_with_ou else False
         }
         
         logger.info(f"O/U Coverage {sport}: {coverage['coverage_pct']:.1f}% ({games_with_ou}/{total_games})")
+        logger.info(f"  Distribution dict has {len(distribution)} keys: {list(distribution.keys())}")
         
         # Log distribution with more detail
         if distribution:
@@ -297,35 +307,35 @@ def validate_ou_coverage(sport: str, min_games: int = 100):
                 logger.info(f"    {result_type}: {count}")
         else:
             logger.warning(f"  ⚠️  Distribution is empty despite {games_with_ou} games with ou_result")
-            # Try a direct count to verify
+            # Try a direct count to verify - use exact status match like debug endpoint
             over_count = db.query(func.count(Game.id)).filter(
                 Game.sport == sport,
-                or_(
-                    Game.status.ilike("%final%"),
-                    Game.status == "final",
-                    Game.status == "STATUS_FINAL"
-                ),
+                Game.status == "final",
                 Game.ou_result == "OVER"
-            ).scalar()
+            ).scalar() or 0
             under_count = db.query(func.count(Game.id)).filter(
                 Game.sport == sport,
-                or_(
-                    Game.status.ilike("%final%"),
-                    Game.status == "final",
-                    Game.status == "STATUS_FINAL"
-                ),
+                Game.status == "final",
                 Game.ou_result == "UNDER"
-            ).scalar()
+            ).scalar() or 0
             push_count = db.query(func.count(Game.id)).filter(
                 Game.sport == sport,
-                or_(
-                    Game.status.ilike("%final%"),
-                    Game.status == "final",
-                    Game.status == "STATUS_FINAL"
-                ),
+                Game.status == "final",
                 Game.ou_result == "PUSH"
-            ).scalar()
-            logger.info(f"  Direct counts - OVER: {over_count}, UNDER: {under_count}, PUSH: {push_count}")
+            ).scalar() or 0
+            logger.info(f"  Direct counts (status='final'): OVER: {over_count}, UNDER: {under_count}, PUSH: {push_count}")
+            
+            # If direct counts work, use them to populate distribution
+            if over_count > 0 or under_count > 0 or push_count > 0:
+                distribution = {}
+                if over_count > 0:
+                    distribution["OVER"] = int(over_count)
+                if under_count > 0:
+                    distribution["UNDER"] = int(under_count)
+                if push_count > 0:
+                    distribution["PUSH"] = int(push_count)
+                coverage['distribution'] = distribution
+                logger.info(f"  Populated distribution from direct counts: {distribution}")
         
         logger.info(f"  Can train: {coverage['can_train']}")
         
