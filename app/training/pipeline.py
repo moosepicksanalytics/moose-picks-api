@@ -509,6 +509,9 @@ def train_model_for_market(
     
     print(f"Training {algorithm} model...")
     
+    # Initialize feature importance dict (will be populated after training)
+    feature_importance = {}
+    
     if market == "score_projection":
         # Regression model
         ModelClass = get_model_class(algorithm, model_type="regression")
@@ -519,6 +522,18 @@ def train_model_for_market(
             random_state=42
         )
         model.fit(X_train_scaled, y_train)
+        
+        # Extract feature importance for regression models
+        if hasattr(model, 'feature_importances_'):
+            importances = model.feature_importances_
+            feature_importance = dict(zip(available_cols, importances))
+            sorted_features = sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)
+            
+            print(f"\n📊 Top 20 Most Important Features:")
+            print("=" * 80)
+            for i, (feat_name, importance) in enumerate(sorted_features[:20], 1):
+                print(f"  {i:2d}. {feat_name:50s} {importance:8.6f}")
+            print("=" * 80)
         
         # Predictions
         y_train_pred = model.predict(X_train_scaled)
@@ -580,6 +595,38 @@ def train_model_for_market(
         # For now, we'll use XGBoost's native probabilities
         print("✓ Model trained (using native XGBoost probabilities)")
         
+        # Extract and log feature importance
+        feature_importance = {}
+        if hasattr(model, 'feature_importances_'):
+            importances = model.feature_importances_
+            # Create dictionary of feature names and their importance scores
+            feature_importance = dict(zip(available_cols, importances))
+            # Sort by importance (descending)
+            sorted_features = sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)
+            
+            print(f"\n📊 Top 20 Most Important Features:")
+            print("=" * 80)
+            for i, (feat_name, importance) in enumerate(sorted_features[:20], 1):
+                print(f"  {i:2d}. {feat_name:50s} {importance:8.6f}")
+            print("=" * 80)
+            
+            # Check for suspicious features (potential leakage)
+            suspicious_keywords = ['actual', 'final', 'result', 'outcome', 'score', 'margin', 
+                                 'edge', 'prob', 'value', 'cover', 'over_under', 'spread_value',
+                                 'totals_value', 'home_cover_prob', 'over_prob']
+            suspicious_features = []
+            for feat_name, importance in sorted_features:
+                feat_lower = feat_name.lower()
+                if any(keyword in feat_lower for keyword in suspicious_keywords):
+                    # But exclude legitimate historical features
+                    if not any(prefix in feat_lower for prefix in ['avg', 'rate', 'h2h', 'ats_', 'last_']):
+                        suspicious_features.append((feat_name, importance))
+            
+            if suspicious_features:
+                print(f"\n⚠️  WARNING: Found {len(suspicious_features)} potentially suspicious features:")
+                for feat_name, importance in suspicious_features[:10]:
+                    print(f"  - {feat_name}: {importance:.6f}")
+        
         # Predictions
         y_train_pred = model.predict(X_train_scaled)
         y_val_pred = model.predict(X_val_scaled)
@@ -587,7 +634,7 @@ def train_model_for_market(
         
         # Log validation accuracy and check for suspiciously high accuracy (possible leakage)
         val_acc = (y_val_pred == y_val).mean()
-        print(f"Validation Accuracy: {val_acc:.3f}")
+        print(f"\nValidation Accuracy: {val_acc:.3f}")
         
         # Expected ranges:
         # Moneyline: 0.50-0.58
@@ -597,6 +644,7 @@ def train_model_for_market(
             print(f"⚠️  WARNING: Spread model accuracy {val_acc:.3f} > 60% - possible data leakage!")
         elif market == "totals" and val_acc > 0.60:
             print(f"⚠️  WARNING: Total model accuracy {val_acc:.3f} > 60% - possible data leakage!")
+            print(f"   Review feature importance above to identify potential leakage sources.")
         elif market == "moneyline" and val_acc > 0.65:
             print(f"⚠️  WARNING: Moneyline model accuracy {val_acc:.3f} > 65% - investigate for leakage!")
     
@@ -632,6 +680,7 @@ def train_model_for_market(
         "n_train_samples": len(X_train),
         "n_val_samples": len(X_val),
         "eval_metrics": eval_results,
+        "feature_importance": feature_importance,
     }
     
     joblib.dump(model_data, model_path)
@@ -644,6 +693,7 @@ def train_model_for_market(
         "n_train_samples": len(X_train),
         "n_val_samples": len(X_val),
         "eval_metrics": eval_results,
+        "feature_importance": feature_importance,
     }
 
 
