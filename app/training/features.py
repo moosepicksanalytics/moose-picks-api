@@ -1065,12 +1065,21 @@ def get_feature_columns(sport: str, market: str) -> List[str]:
     ])
     
     # Team strength
-    base_features.extend([
-        "home_strength",
-        "away_strength",
-        "strength_diff",
-        "win_rate_diff",
-    ])
+    # REMOVED for spread market: home_strength, away_strength, strength_diff use point_diff_avg
+    # which allows model to reconstruct edge (if strength_diff > threshold, predict cover)
+    # This is especially problematic when spreads are missing/null (filled with 0),
+    # making the label "did home win?" which strength_diff can perfectly predict
+    if market == "spread":
+        base_features.extend([
+            "win_rate_diff",  # Only win rate diff is safe (doesn't use point differential)
+        ])
+    else:
+        base_features.extend([
+            "home_strength",
+            "away_strength",
+            "strength_diff",
+            "win_rate_diff",
+        ])
     
     # Sport-specific features
     sport_upper = sport.upper()
