@@ -16,12 +16,18 @@ The O/U system extracts closing totals from ESPN, calculates actual totals from 
 
 ## Setup Steps
 
+### Prerequisites
+
+No prerequisites needed! All commands use the Railway API via PowerShell `Invoke-RestMethod`.
+
+**Base URL:** `https://moose-picks-api-production.up.railway.app`
+
 ### 1. Run Database Migration
 
-Add the new columns to your database:
+Add the new columns to your database via API:
 
 ```powershell
-python scripts/migrate_add_ou_columns.py
+Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/migrate-ou-columns" -Method POST
 ```
 
 This will:
@@ -30,30 +36,35 @@ This will:
 - Add `ou_result` (VARCHAR) column
 - Create index on `(sport, ou_result)` for faster queries
 
+**Note:** The migration runs in the background. Check Railway logs to verify completion.
+
 ### 2. Backfill Historical Data
 
-Backfill O/U data for existing games:
+Backfill O/U data for existing games via API:
 
 ```powershell
 # Backfill all sports
-python scripts/backfill_ou_data.py --sport ALL
+Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/backfill-ou-data?sport=ALL" -Method POST
 
 # Backfill specific sport
-python scripts/backfill_ou_data.py --sport NFL
+Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/backfill-ou-data?sport=NFL" -Method POST
 
-# Backfill date range
-python scripts/backfill_ou_data.py --sport NHL --start 2024-01-01 --end 2024-12-31
-
-# Validate coverage (no backfill)
-python scripts/backfill_ou_data.py --validate
+# Backfill date range for specific sport
+Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/backfill-ou-data?sport=NHL&start_date=2024-01-01&end_date=2024-12-31" -Method POST
 ```
+
+**Note:** Backfill runs in the background. Check Railway logs to monitor progress.
 
 ### 3. Verify Coverage
 
 Check if you have enough O/U data for training:
 
 ```powershell
-python scripts/backfill_ou_data.py --validate
+# Validate all sports
+Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/validate-ou-coverage" -Method GET
+
+# Validate specific sport
+Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/validate-ou-coverage?sport=NFL" -Method GET
 ```
 
 Expected output:
@@ -73,12 +84,14 @@ O/U Coverage NFL: 85.2% (1234/1447)
 Once you have sufficient O/U data, retrain your totals models:
 
 ```powershell
-# On Railway
+# Trigger training via Railway API (recommended)
 Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/trigger-daily-workflow?train=true&predict=false" -Method POST
 
-# Locally
-python scripts/train_all.py
+# Or run training script directly on Railway
+railway run python scripts/train_all.py
 ```
+
+**Note:** The API endpoint runs in the background and returns immediately. Check Railway logs to monitor progress.
 
 ## How It Works
 
@@ -113,7 +126,7 @@ The system handles:
 **Cause**: All games went OVER (or all went UNDER) - data quality issue
 
 **Solutions**:
-1. Check if you have enough games: `python scripts/backfill_ou_data.py --validate`
+1. Check if you have enough games: `Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/validate-ou-coverage" -Method GET`
 2. Verify distribution is balanced (not all one outcome)
 3. Check if `closing_total` values are correct (not all 0 or very low)
 4. Ensure you're using final games with actual scores
@@ -123,18 +136,30 @@ The system handles:
 **Cause**: Missing `closing_total` or `ou_result` data
 
 **Solutions**:
-1. Run backfill: `python scripts/backfill_ou_data.py --sport <SPORT>`
+1. Run backfill: `Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/backfill-ou-data?sport=<SPORT>" -Method POST`
 2. Check if ESPN is providing `overUnder` in odds data
-3. Verify database migration ran successfully
+3. Verify database migration ran successfully: `Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/migrate-ou-columns" -Method POST`
 
 ### Low Coverage Percentage
 
 **Cause**: Many games missing O/U data
 
 **Solutions**:
-1. Backfill more historical data
+1. Backfill more historical data: `Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/backfill-ou-data?sport=<SPORT>" -Method POST`
 2. Check if ESPN API is returning odds data
 3. Some games may not have closing totals (normal for some sports/leagues)
+
+### API Response Issues
+
+**"Connection refused" or timeout**:
+- Verify Railway service is running (check Railway dashboard)
+- Check if the API URL is correct
+- Wait a few minutes and retry
+
+**Background tasks not completing**:
+- Check Railway logs for errors
+- Large backfills may take 10-30 minutes
+- Consider backfilling one sport at a time
 
 ## Files Modified
 
@@ -145,12 +170,66 @@ The system handles:
 - `scripts/backfill_ou_data.py` - Backfill script
 - `scripts/migrate_add_ou_columns.py` - Database migration
 
+## Quick Reference: API PowerShell Commands
+
+### Complete Setup Workflow
+
+```powershell
+# Base URL (set as variable for convenience)
+$baseUrl = "https://moose-picks-api-production.up.railway.app"
+
+# 1. Run migration
+Invoke-RestMethod -Uri "$baseUrl/api/migrate-ou-columns" -Method POST
+
+# 2. Backfill all sports
+Invoke-RestMethod -Uri "$baseUrl/api/backfill-ou-data?sport=ALL" -Method POST
+
+# 3. Validate coverage
+Invoke-RestMethod -Uri "$baseUrl/api/validate-ou-coverage" -Method GET
+
+# 4. Retrain models
+Invoke-RestMethod -Uri "$baseUrl/api/trigger-daily-workflow?train=true&predict=false" -Method POST
+```
+
+### Individual Commands
+
+```powershell
+# Migration
+Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/migrate-ou-columns" -Method POST
+
+# Backfill all sports
+Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/backfill-ou-data?sport=ALL" -Method POST
+
+# Backfill specific sport
+Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/backfill-ou-data?sport=NFL" -Method POST
+
+# Backfill with date range
+Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/backfill-ou-data?sport=NHL&start_date=2024-01-01&end_date=2024-12-31" -Method POST
+
+# Validate all sports
+Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/validate-ou-coverage" -Method GET
+
+# Validate specific sport
+Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/validate-ou-coverage?sport=NFL" -Method GET
+
+# Retrain models
+Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/trigger-daily-workflow?train=true&predict=false" -Method POST
+```
+
+### Monitoring Progress
+
+Check Railway logs to monitor backfill progress:
+- Railway Dashboard → Your Service → Logs
+- Look for "Updated X games with O/U data" messages
+- Check for any errors or warnings
+- API endpoints return immediately; tasks run in background
+
 ## Next Steps
 
-1. ✅ Run migration
-2. ✅ Backfill historical data
-3. ✅ Validate coverage
-4. ✅ Retrain totals models
-5. ✅ Verify models train successfully
+1. ✅ Run migration: `Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/migrate-ou-columns" -Method POST`
+2. ✅ Backfill historical data: `Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/backfill-ou-data?sport=ALL" -Method POST`
+3. ✅ Validate coverage: `Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/validate-ou-coverage" -Method GET`
+4. ✅ Retrain totals models: `Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/trigger-daily-workflow?train=true&predict=false" -Method POST`
+5. ✅ Verify models train successfully (check Railway logs)
 
 After completing these steps, your totals models should train successfully with proper OVER/UNDER labels!

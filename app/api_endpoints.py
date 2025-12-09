@@ -169,6 +169,139 @@ def trigger_backfill_odds(
     }
 
 
+@router.post("/migrate-ou-columns")
+def trigger_migrate_ou_columns(background_tasks: BackgroundTasks):
+    """
+    Run database migration to add O/U columns (closing_total, actual_total, ou_result).
+    
+    Returns:
+        Status message
+        
+    Example:
+        POST /api/migrate-ou-columns
+    """
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from scripts.migrate_add_ou_columns import migrate_add_ou_columns
+    
+    def run_migration():
+        try:
+            migrate_add_ou_columns()
+            print("✓ Migration completed successfully")
+        except Exception as e:
+            print(f"✗ Migration failed: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    background_tasks.add_task(run_migration)
+    
+    return {
+        "status": "started",
+        "message": "Database migration started in background",
+        "note": "Check Railway logs to monitor progress. This adds closing_total, actual_total, and ou_result columns."
+    }
+
+
+@router.post("/backfill-ou-data")
+def trigger_backfill_ou_data(
+    background_tasks: BackgroundTasks,
+    sport: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+):
+    """
+    Backfill Over/Under (O/U) data for historical games.
+    
+    Calculates actual_total and ou_result from existing scores and over_under values.
+    
+    Args:
+        sport: Sport code (NFL, NHL, NBA, MLB, or ALL) - default: ALL
+        start_date: Start date in YYYY-MM-DD format (optional)
+        end_date: End date in YYYY-MM-DD format (optional)
+    
+    Returns:
+        Status message
+        
+    Example:
+        POST /api/backfill-ou-data?sport=ALL
+        POST /api/backfill-ou-data?sport=NFL&start_date=2024-01-01&end_date=2024-12-31
+    """
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from scripts.backfill_ou_data import backfill_ou_for_sport, backfill_all_sports
+    from datetime import datetime
+    
+    def run_backfill():
+        try:
+            if sport and sport.upper() == "ALL":
+                backfill_all_sports()
+            elif sport:
+                start = datetime.fromisoformat(start_date) if start_date else None
+                end = datetime.fromisoformat(end_date) if end_date else None
+                backfill_ou_for_sport(sport.upper(), start, end)
+            else:
+                backfill_all_sports()
+            print("✓ O/U backfill completed")
+        except Exception as e:
+            print(f"✗ O/U backfill failed: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    background_tasks.add_task(run_backfill)
+    
+    return {
+        "status": "started",
+        "message": "O/U data backfill started in background",
+        "sport": sport or "ALL",
+        "start_date": start_date,
+        "end_date": end_date,
+        "note": "Check Railway logs to monitor progress"
+    }
+
+
+@router.get("/validate-ou-coverage")
+def get_ou_coverage(sport: Optional[str] = None):
+    """
+    Validate Over/Under data coverage for training.
+    
+    Returns coverage statistics and distribution for each sport.
+    
+    Args:
+        sport: Sport code (NFL, NHL, NBA, MLB) - if not provided, returns all sports
+    
+    Returns:
+        Coverage statistics including total games, games with O/U data, distribution, and training readiness
+        
+    Example:
+        GET /api/validate-ou-coverage
+        GET /api/validate-ou-coverage?sport=NFL
+    """
+    import sys
+    from pathlib import Path
+    import logging
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from scripts.backfill_ou_data import validate_ou_coverage
+    
+    # Suppress logging output for API response
+    logging.getLogger().setLevel(logging.ERROR)
+    
+    if sport:
+        coverage = validate_ou_coverage(sport.upper())
+        return {
+            "sport": sport.upper(),
+            "coverage": coverage
+        }
+    else:
+        results = {}
+        for s in ["NFL", "NHL", "NBA", "MLB"]:
+            results[s] = validate_ou_coverage(s)
+        return {
+            "all_sports": results
+        }
+
+
 @router.post("/trigger-daily-workflow")
 def trigger_daily_workflow(
     background_tasks: BackgroundTasks,
