@@ -18,29 +18,45 @@ import matplotlib.pyplot as plt
 
 
 def evaluate_classification_model(
-    y_true: pd.Series,
-    y_pred_proba: pd.Series,
-    y_pred: Optional[pd.Series] = None
+    y_true,
+    y_pred_proba,
+    y_pred = None
 ) -> Dict[str, float]:
     """
     Evaluate a classification model (moneyline, spread, totals).
     
     Args:
-        y_true: True binary labels
-        y_pred_proba: Predicted probabilities
+        y_true: True binary labels (pandas Series or numpy array)
+        y_pred_proba: Predicted probabilities (pandas Series or numpy array)
         y_pred: Predicted binary labels (if None, uses 0.5 threshold)
     
     Returns:
         Dict with evaluation metrics
     """
+    # Convert to numpy arrays if needed
+    if isinstance(y_true, pd.Series):
+        y_true_arr = y_true.values
+    else:
+        y_true_arr = np.asarray(y_true)
+    
+    if isinstance(y_pred_proba, pd.Series):
+        y_pred_proba_arr = y_pred_proba.values
+    else:
+        y_pred_proba_arr = np.asarray(y_pred_proba)
+    
     if y_pred is None:
-        y_pred = (y_pred_proba >= 0.5).astype(int)
+        y_pred_arr = (y_pred_proba_arr >= 0.5).astype(int)
+    else:
+        if isinstance(y_pred, pd.Series):
+            y_pred_arr = y_pred.values
+        else:
+            y_pred_arr = np.asarray(y_pred)
     
     # Remove NaN values
-    mask = ~(pd.isna(y_true) | pd.isna(y_pred_proba))
-    y_true_clean = y_true[mask]
-    y_pred_proba_clean = y_pred_proba[mask]
-    y_pred_clean = y_pred[mask]
+    mask = ~(np.isnan(y_true_arr) | np.isnan(y_pred_proba_arr))
+    y_true_clean = y_true_arr[mask]
+    y_pred_proba_clean = y_pred_proba_arr[mask]
+    y_pred_clean = y_pred_arr[mask]
     
     if len(y_true_clean) == 0:
         return {
@@ -57,7 +73,8 @@ def evaluate_classification_model(
     }
     
     # ROC AUC (only if both classes present)
-    if len(y_true_clean.unique()) == 2:
+    unique_classes = np.unique(y_true_clean)
+    if len(unique_classes) == 2:
         try:
             metrics["roc_auc"] = roc_auc_score(y_true_clean, y_pred_proba_clean)
         except ValueError:
@@ -69,22 +86,34 @@ def evaluate_classification_model(
 
 
 def evaluate_regression_model(
-    y_true: pd.Series,
-    y_pred: pd.Series
+    y_true,
+    y_pred
 ) -> Dict[str, float]:
     """
     Evaluate a regression model (score projection).
     
     Args:
-        y_true: True values
-        y_pred: Predicted values
+        y_true: True values (pandas Series or numpy array)
+        y_pred: Predicted values (pandas Series or numpy array)
     
     Returns:
         Dict with evaluation metrics
     """
-    mask = ~(pd.isna(y_true) | pd.isna(y_pred))
-    y_true_clean = y_true[mask]
-    y_pred_clean = y_pred[mask]
+    # Convert to numpy arrays if needed
+    if isinstance(y_true, pd.Series):
+        y_true_arr = y_true.values
+    else:
+        y_true_arr = np.asarray(y_true)
+    
+    if isinstance(y_pred, pd.Series):
+        y_pred_arr = y_pred.values
+    else:
+        y_pred_arr = np.asarray(y_pred)
+    
+    # Handle NaN values
+    mask = ~(np.isnan(y_true_arr) | np.isnan(y_pred_arr))
+    y_true_clean = y_true_arr[mask]
+    y_pred_clean = y_pred_arr[mask]
     
     if len(y_true_clean) == 0:
         return {
@@ -101,8 +130,8 @@ def evaluate_regression_model(
 
 
 def calculate_ece(
-    y_true: pd.Series,
-    y_pred_proba: pd.Series,
+    y_true,
+    y_pred_proba,
     n_bins: int = 10
 ) -> float:
     """
@@ -112,16 +141,23 @@ def calculate_ece(
     Lower is better (0 = perfectly calibrated).
     
     Args:
-        y_true: True binary labels
-        y_pred_proba: Predicted probabilities
+        y_true: True binary labels (pandas Series or numpy array)
+        y_pred_proba: Predicted probabilities (pandas Series or numpy array)
         n_bins: Number of bins for calibration (default 10)
     
     Returns:
         ECE value (0-1)
     """
-    mask = ~(pd.isna(y_true) | pd.isna(y_pred_proba))
-    y_true_clean = y_true[mask].values
-    y_pred_proba_clean = y_pred_proba[mask].values
+    # Convert to numpy arrays if needed
+    if isinstance(y_true, pd.Series):
+        y_true = y_true.values
+    if isinstance(y_pred_proba, pd.Series):
+        y_pred_proba = y_pred_proba.values
+    
+    # Handle NaN values
+    mask = ~(np.isnan(y_true) | np.isnan(y_pred_proba))
+    y_true_clean = y_true[mask]
+    y_pred_proba_clean = y_pred_proba[mask]
     
     if len(y_true_clean) == 0:
         return np.nan
@@ -149,24 +185,36 @@ def calculate_ece(
 
 
 def evaluate_calibration(
-    y_true: pd.Series,
-    y_pred_proba: pd.Series,
+    y_true,
+    y_pred_proba,
     n_bins: int = 10
 ) -> Dict:
     """
     Evaluate probability calibration with comprehensive metrics.
     
     Args:
-        y_true: True binary labels
-        y_pred_proba: Predicted probabilities
+        y_true: True binary labels (pandas Series or numpy array)
+        y_pred_proba: Predicted probabilities (pandas Series or numpy array)
         n_bins: Number of bins for calibration
     
     Returns:
         Dict with calibration metrics (ECE, Brier Score, Log Loss)
     """
-    mask = ~(pd.isna(y_true) | pd.isna(y_pred_proba))
-    y_true_clean = y_true[mask]
-    y_pred_proba_clean = y_pred_proba[mask]
+    # Convert to numpy arrays if needed
+    if isinstance(y_true, pd.Series):
+        y_true_arr = y_true.values
+    else:
+        y_true_arr = np.asarray(y_true)
+    
+    if isinstance(y_pred_proba, pd.Series):
+        y_pred_proba_arr = y_pred_proba.values
+    else:
+        y_pred_proba_arr = np.asarray(y_pred_proba)
+    
+    # Handle NaN values
+    mask = ~(np.isnan(y_true_arr) | np.isnan(y_pred_proba_arr))
+    y_true_clean = y_true_arr[mask]
+    y_pred_proba_clean = y_pred_proba_arr[mask]
     
     if len(y_true_clean) == 0:
         return {
@@ -269,12 +317,12 @@ def calculate_roi_by_edge_bucket(
 
 
 def evaluate_model_comprehensive(
-    y_true: pd.Series,
-    y_pred_proba: pd.Series,
-    y_pred: Optional[pd.Series] = None,
+    y_true,
+    y_pred_proba,
+    y_pred = None,
     model_type: str = "classification",
-    edges: Optional[pd.Series] = None,
-    odds: Optional[pd.Series] = None
+    edges = None,
+    odds = None
 ) -> Dict:
     """
     Comprehensive model evaluation with priority on ROI and calibration.
@@ -287,16 +335,24 @@ def evaluate_model_comprehensive(
     5. Precision/recall - standard classification metrics
     
     Args:
-        y_true: True labels/values
-        y_pred_proba: Predicted probabilities
-        y_pred: Predicted labels/values
+        y_true: True labels/values (pandas Series or numpy array)
+        y_pred_proba: Predicted probabilities (pandas Series or numpy array)
+        y_pred: Predicted labels/values (pandas Series or numpy array, optional)
         model_type: "classification" or "regression"
-        edges: Calculated edges (for ROI analysis)
-        odds: American odds (for ROI analysis)
+        edges: Calculated edges (for ROI analysis, pandas Series or numpy array)
+        odds: American odds (for ROI analysis, pandas Series or numpy array)
     
     Returns:
         Dict with all evaluation metrics (prioritized)
     """
+    # Convert to pandas Series for easier indexing (if needed)
+    if not isinstance(y_true, pd.Series):
+        y_true = pd.Series(y_true)
+    if not isinstance(y_pred_proba, pd.Series):
+        y_pred_proba = pd.Series(y_pred_proba)
+    if y_pred is not None and not isinstance(y_pred, pd.Series):
+        y_pred = pd.Series(y_pred)
+    
     results = {}
     
     if model_type == "classification":
@@ -310,10 +366,13 @@ def evaluate_model_comprehensive(
         
         # Value bet accuracy (filter for high edge bets)
         if edges is not None:
+            if not isinstance(edges, pd.Series):
+                edges = pd.Series(edges)
             value_bet_mask = edges >= 0.05  # 5% edge threshold
             if value_bet_mask.sum() > 0:
                 value_y_true = y_true[value_bet_mask]
-                value_y_pred = (y_pred_proba[value_bet_mask] >= 0.5).astype(int) if y_pred is None else y_pred[value_bet_mask]
+                value_y_pred_proba = y_pred_proba[value_bet_mask]
+                value_y_pred = (value_y_pred_proba >= 0.5).astype(int) if y_pred is None else y_pred[value_bet_mask]
                 value_accuracy = accuracy_score(value_y_true, value_y_pred)
                 results["value_bet_accuracy"] = value_accuracy
                 results["value_bet_count"] = int(value_bet_mask.sum())
@@ -323,12 +382,18 @@ def evaluate_model_comprehensive(
         
         # ROI analysis if edges and odds provided
         if edges is not None and odds is not None:
+            if not isinstance(edges, pd.Series):
+                edges = pd.Series(edges)
+            if not isinstance(odds, pd.Series):
+                odds = pd.Series(odds)
             roi_by_bucket = calculate_roi_by_edge_bucket(y_true, y_pred_proba, edges, odds)
             results["roi_by_bucket"] = roi_by_bucket
     else:
         # Regression metrics
         if y_pred is None:
             y_pred = y_pred_proba
+        if not isinstance(y_pred, pd.Series):
+            y_pred = pd.Series(y_pred)
         results.update(evaluate_regression_model(y_true, y_pred))
     
     return results
