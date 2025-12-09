@@ -261,6 +261,43 @@ def trigger_backfill_ou_data(
     }
 
 
+@router.post("/train")
+def train_model(sport: str, market: str, background_tasks: BackgroundTasks):
+    """
+    Train a model for a specific sport and market.
+    
+    Args:
+        sport: Sport code (NFL, NHL, NBA, MLB)
+        market: Market type (moneyline, spread, totals)
+    
+    Returns:
+        Status message indicating training has started
+    """
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from app.training.pipeline import train_model_for_market
+    
+    def run_training():
+        try:
+            result = train_model_for_market(sport.upper(), market.lower())
+            print(f"Training completed for {sport} {market}: {result}")
+        except Exception as e:
+            print(f"Error training {sport} {market}: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    # Run in background
+    background_tasks.add_task(run_training)
+    
+    return {
+        "status": "started",
+        "message": f"Training started for {sport.upper()} {market.lower()}",
+        "sport": sport.upper(),
+        "market": market.lower()
+    }
+
+
 @router.get("/debug-ou-results")
 def debug_ou_results(sport: str):
     """
