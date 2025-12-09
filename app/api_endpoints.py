@@ -301,6 +301,14 @@ def get_latest_predictions(sport: str = "NFL", limit: int = 10):
                 return None
             return float(value) if value is not None else None
         
+        # Import edge calculation utilities
+        from app.utils.odds import (
+            calculate_moneyline_edge,
+            calculate_spread_edge,
+            calculate_totals_edge,
+            american_odds_to_implied_prob
+        )
+        
         # Convert to dict format
         picks = []
         for pred in predictions:
@@ -322,21 +330,53 @@ def get_latest_predictions(sport: str = "NFL", limit: int = 10):
             # Add market-specific data with safe float conversion
             if pred.market == "moneyline":
                 home_prob = safe_float(pred.home_win_prob)
+                away_prob = 1 - home_prob if home_prob is not None else None
                 pick["side"] = "home" if home_prob and home_prob > 0.5 else "away"
                 pick["home_win_prob"] = home_prob
-                pick["edge"] = abs(home_prob - 0.5) if home_prob is not None else 0.0
+                
+                # Calculate actual edge using odds
+                if home_prob is not None and game.home_moneyline is not None and game.away_moneyline is not None:
+                    ml_edges = calculate_moneyline_edge(
+                        home_prob, away_prob,
+                        safe_float(game.home_moneyline),
+                        safe_float(game.away_moneyline)
+                    )
+                    if pick["side"] == "home":
+                        pick["edge"] = ml_edges["home_edge"] if ml_edges["home_edge"] else 0.0
+                    else:
+                        pick["edge"] = ml_edges["away_edge"] if ml_edges["away_edge"] else 0.0
+                else:
+                    pick["edge"] = 0.0
             elif pred.market == "spread":
                 spread_prob = safe_float(pred.spread_cover_prob)
                 pick["side"] = "home" if spread_prob and spread_prob > 0.5 else "away"
                 pick["spread_cover_prob"] = spread_prob
                 pick["spread"] = safe_float(game.spread)
-                pick["edge"] = abs(spread_prob - 0.5) if spread_prob is not None else 0.0
+                
+                # Calculate actual edge using odds (default to -110 if no odds)
+                spread_odds = safe_float(game.spread_odds) if hasattr(game, 'spread_odds') and game.spread_odds else -110.0
+                if spread_prob is not None:
+                    pick["edge"] = calculate_spread_edge(spread_prob, spread_odds)
+                else:
+                    pick["edge"] = 0.0
             elif pred.market == "totals" or pred.market == "over_under":
                 over_prob = safe_float(pred.over_prob)
+                under_prob = 1 - over_prob if over_prob is not None else None
                 pick["side"] = "over" if over_prob and over_prob > 0.5 else "under"
                 pick["over_prob"] = over_prob
                 pick["over_under"] = safe_float(game.over_under)
-                pick["edge"] = abs(over_prob - 0.5) if over_prob is not None else 0.0
+                
+                # Calculate actual edge using odds (default to -110 if no odds)
+                over_odds = safe_float(game.over_odds) if hasattr(game, 'over_odds') and game.over_odds else -110.0
+                under_odds = safe_float(game.under_odds) if hasattr(game, 'under_odds') and game.under_odds else -110.0
+                if over_prob is not None:
+                    totals_edges = calculate_totals_edge(over_prob, under_prob, over_odds, under_odds)
+                    if pick["side"] == "over":
+                        pick["edge"] = totals_edges["over_edge"] if totals_edges["over_edge"] else 0.0
+                    else:
+                        pick["edge"] = totals_edges["under_edge"] if totals_edges["under_edge"] else 0.0
+                else:
+                    pick["edge"] = 0.0
             
             pick["recommended_kelly"] = safe_float(pred.recommended_kelly)
             pick["recommended_unit_size"] = safe_float(pred.recommended_unit_size) if pred.recommended_unit_size is not None else 1.0
@@ -540,6 +580,14 @@ def get_predictions_by_date_range(
                 return None
             return float(value) if value is not None else None
         
+        # Import edge calculation utilities
+        from app.utils.odds import (
+            calculate_moneyline_edge,
+            calculate_spread_edge,
+            calculate_totals_edge,
+            american_odds_to_implied_prob
+        )
+        
         # Convert to dict format
         picks = []
         for pred in predictions:
@@ -561,21 +609,53 @@ def get_predictions_by_date_range(
             # Add market-specific data with safe float conversion
             if pred.market == "moneyline":
                 home_prob = safe_float(pred.home_win_prob)
+                away_prob = 1 - home_prob if home_prob is not None else None
                 pick["side"] = "home" if home_prob and home_prob > 0.5 else "away"
                 pick["home_win_prob"] = home_prob
-                pick["edge"] = abs(home_prob - 0.5) if home_prob is not None else 0.0
+                
+                # Calculate actual edge using odds
+                if home_prob is not None and game.home_moneyline is not None and game.away_moneyline is not None:
+                    ml_edges = calculate_moneyline_edge(
+                        home_prob, away_prob,
+                        safe_float(game.home_moneyline),
+                        safe_float(game.away_moneyline)
+                    )
+                    if pick["side"] == "home":
+                        pick["edge"] = ml_edges["home_edge"] if ml_edges["home_edge"] else 0.0
+                    else:
+                        pick["edge"] = ml_edges["away_edge"] if ml_edges["away_edge"] else 0.0
+                else:
+                    pick["edge"] = 0.0
             elif pred.market == "spread":
                 spread_prob = safe_float(pred.spread_cover_prob)
                 pick["side"] = "home" if spread_prob and spread_prob > 0.5 else "away"
                 pick["spread_cover_prob"] = spread_prob
                 pick["spread"] = safe_float(game.spread)
-                pick["edge"] = abs(spread_prob - 0.5) if spread_prob is not None else 0.0
+                
+                # Calculate actual edge using odds (default to -110 if no odds)
+                spread_odds = safe_float(game.spread_odds) if hasattr(game, 'spread_odds') and game.spread_odds else -110.0
+                if spread_prob is not None:
+                    pick["edge"] = calculate_spread_edge(spread_prob, spread_odds)
+                else:
+                    pick["edge"] = 0.0
             elif pred.market == "totals" or pred.market == "over_under":
                 over_prob = safe_float(pred.over_prob)
+                under_prob = 1 - over_prob if over_prob is not None else None
                 pick["side"] = "over" if over_prob and over_prob > 0.5 else "under"
                 pick["over_prob"] = over_prob
                 pick["over_under"] = safe_float(game.over_under)
-                pick["edge"] = abs(over_prob - 0.5) if over_prob is not None else 0.0
+                
+                # Calculate actual edge using odds (default to -110 if no odds)
+                over_odds = safe_float(game.over_odds) if hasattr(game, 'over_odds') and game.over_odds else -110.0
+                under_odds = safe_float(game.under_odds) if hasattr(game, 'under_odds') and game.under_odds else -110.0
+                if over_prob is not None:
+                    totals_edges = calculate_totals_edge(over_prob, under_prob, over_odds, under_odds)
+                    if pick["side"] == "over":
+                        pick["edge"] = totals_edges["over_edge"] if totals_edges["over_edge"] else 0.0
+                    else:
+                        pick["edge"] = totals_edges["under_edge"] if totals_edges["under_edge"] else 0.0
+                else:
+                    pick["edge"] = 0.0
             
             pick["recommended_kelly"] = safe_float(pred.recommended_kelly)
             pick["recommended_unit_size"] = safe_float(pred.recommended_unit_size) if pred.recommended_unit_size is not None else 1.0
