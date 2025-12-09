@@ -137,9 +137,11 @@ def split_by_season(
         train_df = df[~df["year"].isin(val_years)].copy()
         val_df = df[df["year"].isin(val_years)].copy()
         
-        # Check if validation set is too small (<10% of total data)
+        # Check if validation set is too small (<15% of total data OR <300 samples)
         val_ratio = len(val_df) / len(df)
-        if val_ratio < 0.1:
+        min_val_samples = 300  # Minimum absolute number of validation samples
+        
+        if val_ratio < 0.15 or len(val_df) < min_val_samples:
             print(f"  ⚠️  Validation set too small ({len(val_df)} samples, {val_ratio:.1%} of data)")
             print(f"  ⚠️  Val years {sorted(val_years)} appear incomplete. Using 80/20 temporal split instead")
             return split_temporal(df.drop(columns=["year"]), test_size=0.2)
