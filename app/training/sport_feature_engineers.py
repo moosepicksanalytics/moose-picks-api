@@ -108,14 +108,15 @@ class NFLFeatureEngineer(BaseFeatureEngineer):
                 # Simple estimates for NFL-specific metrics
                 # In production, these would come from detailed ESPN stats
                 if home_score > away_score:
-                    df.at[idx, "home_time_of_possession"] = 0.55  # Estimate
-                    df.at[idx, "away_time_of_possession"] = 0.45
-                else:
-                    df.at[idx, "home_time_of_possession"] = 0.45
-                    df.at[idx, "away_time_of_possession"] = 0.55
+                    # REMOVED: time_of_possession estimation using current game outcome
+                    # This was data leakage - using home_score > away_score directly encodes the target
+                    # Keep default values (0.0) - in future, calculate from historical data only
+                    pass  # Keep default 0.0 values set above
                 
-                # Estimate turnover differential (winning team typically has fewer turnovers)
-                df.at[idx, "turnover_differential"] = (home_score - away_score) / 7.0  # Rough estimate
+                # REMOVED: turnover_differential estimation using current game outcome
+                # This was data leakage - using (home_score - away_score) directly encodes the target
+                # Keep default value (0.0) - in future, calculate from historical data only
+                pass  # Keep default 0.0 value set above
         
         # Calculate rolling NFL-specific averages
         for window in self.rolling_windows:

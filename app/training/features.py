@@ -1094,8 +1094,10 @@ def get_feature_columns(sport: str, market: str) -> List[str]:
             "home_redzone_efficiency",
             "away_redzone_efficiency",
             "turnover_differential",
-            "home_time_of_possession",
-            "away_time_of_possession",
+            # REMOVED: home_time_of_possession, away_time_of_possession - was causing data leakage
+            # Time of possession was being calculated from current game outcome (home_score > away_score)
+            # which directly encodes the target variable. Until we can calculate from historical data only,
+            # we'll exclude it.
         ])
         for window in [3, 5, 10, 15]:
             for prefix in ["home", "away"]:
@@ -1103,7 +1105,7 @@ def get_feature_columns(sport: str, market: str) -> List[str]:
                     f"{prefix}_third_down_pct_{window}",
                     f"{prefix}_redzone_efficiency_{window}",
                     f"{prefix}_turnover_differential_{window}",
-                    f"{prefix}_time_of_possession_{window}",
+                    # REMOVED: f"{prefix}_time_of_possession_{window}" - data leakage
                 ])
     elif sport_upper == "NHL":
         base_features.extend([
