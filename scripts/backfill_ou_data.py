@@ -185,25 +185,23 @@ def validate_ou_coverage(sport: str, min_games: int = 100):
     
     try:
         # Count total final games - use same status matching as backfill
+        status_filter = or_(
+            Game.status.ilike("%final%"),
+            Game.status == "final",
+            Game.status == "STATUS_FINAL"
+        )
+        
         total_games = db.query(func.count(Game.id)).filter(
             Game.sport == sport,
-            or_(
-                Game.status.ilike("%final%"),
-                Game.status == "final",
-                Game.status == "STATUS_FINAL"
-            )
-        ).scalar()
+            status_filter
+        ).scalar() or 0
         
         # Count games with O/U result - use same status matching
         games_with_ou = db.query(func.count(Game.id)).filter(
             Game.sport == sport,
-            or_(
-                Game.status.ilike("%final%"),
-                Game.status == "final",
-                Game.status == "STATUS_FINAL"
-            ),
+            status_filter,
             Game.ou_result.isnot(None)
-        ).scalar()
+        ).scalar() or 0
         
         # Get distribution - query for all non-null, non-empty ou_result values
         # Use same status matching as backfill to ensure consistency
@@ -212,11 +210,7 @@ def validate_ou_coverage(sport: str, min_games: int = 100):
             func.count(Game.id).label('count')
         ).filter(
             Game.sport == sport,
-            or_(
-                Game.status.ilike("%final%"),
-                Game.status == "final",
-                Game.status == "STATUS_FINAL"
-            ),
+            status_filter,
             Game.ou_result.isnot(None)
         ).group_by(Game.ou_result).all()
         
