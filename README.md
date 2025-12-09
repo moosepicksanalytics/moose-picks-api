@@ -344,6 +344,7 @@ python test_local.py NFL moneyline
 - API endpoints ready for frontend
 - Predictions available via REST API
 - Real-time updates via daily workflow
+- **See `LOVABLE_INTEGRATION.md` for cron job setup and frontend integration**
 
 ## License
 

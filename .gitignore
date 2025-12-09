@@ -201,3 +201,5 @@ local_test_results/
 .env.local
 .env.test
 BACKFILL_ODDS_STEPS.md
+TEST_PREDICTIONS_GUIDE.md
+LOVABLE_INTEGRATION.md

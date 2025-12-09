@@ -169,13 +169,15 @@ def predict_for_game(
         expected_features = ml_model_data.get("feature_columns", feature_cols)
         
         # Create feature vector with expected features in correct order
-        X_aligned = pd.DataFrame(index=[0])
+        # Build as dict first to avoid DataFrame fragmentation warnings
+        feature_dict = {}
         for feat in expected_features:
-            if feat in df.columns:
-                X_aligned[feat] = df[feat].iloc[0] if len(df) > 0 else 0
+            if feat in df.columns and len(df) > 0:
+                feature_dict[feat] = df[feat].iloc[0]
             else:
                 # Fill missing features with 0 (model was trained without this feature)
-                X_aligned[feat] = 0
+                feature_dict[feat] = 0
+        X_aligned = pd.DataFrame([feature_dict])
         
         # Ensure columns are in the same order as training
         X_aligned = X_aligned[expected_features].fillna(0)
@@ -239,12 +241,14 @@ def predict_for_game(
         expected_features_spread = spread_model_data.get("feature_columns", feature_cols_spread)
         
         # Create aligned feature vector in correct order
-        X_spread_aligned = pd.DataFrame(index=[0])
+        # Build as dict first to avoid DataFrame fragmentation warnings
+        spread_feature_dict = {}
         for feat in expected_features_spread:
-            if feat in df_spread.columns:
-                X_spread_aligned[feat] = df_spread[feat].iloc[0] if len(df_spread) > 0 else 0
+            if feat in df_spread.columns and len(df_spread) > 0:
+                spread_feature_dict[feat] = df_spread[feat].iloc[0]
             else:
-                X_spread_aligned[feat] = 0
+                spread_feature_dict[feat] = 0
+        X_spread_aligned = pd.DataFrame([spread_feature_dict])
         
         # Ensure columns are in the same order as training
         X_spread_aligned = X_spread_aligned[expected_features_spread].fillna(0)
@@ -354,19 +358,22 @@ def predict_for_game(
         expected_features_away = away_model_data.get("feature_columns", feature_cols_score)
         
         # Create aligned feature vectors in correct order
-        X_home_aligned = pd.DataFrame(index=[0])
+        # Build as dicts first to avoid DataFrame fragmentation warnings
+        home_feature_dict = {}
         for feat in expected_features_home:
-            if feat in df.columns:
-                X_home_aligned[feat] = df[feat].iloc[0] if len(df) > 0 else 0
+            if feat in df.columns and len(df) > 0:
+                home_feature_dict[feat] = df[feat].iloc[0]
             else:
-                X_home_aligned[feat] = 0
+                home_feature_dict[feat] = 0
+        X_home_aligned = pd.DataFrame([home_feature_dict])
         
-        X_away_aligned = pd.DataFrame(index=[0])
+        away_feature_dict = {}
         for feat in expected_features_away:
-            if feat in df.columns:
-                X_away_aligned[feat] = df[feat].iloc[0] if len(df) > 0 else 0
+            if feat in df.columns and len(df) > 0:
+                away_feature_dict[feat] = df[feat].iloc[0]
             else:
-                X_away_aligned[feat] = 0
+                away_feature_dict[feat] = 0
+        X_away_aligned = pd.DataFrame([away_feature_dict])
         
         # Ensure columns are in the same order as training
         X_home_aligned = X_home_aligned[expected_features_home].fillna(0)
