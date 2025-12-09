@@ -28,6 +28,77 @@ from app.data_loader import (
 )
 from app.training.features import build_features, get_feature_columns
 from app.training.evaluate import evaluate_model_comprehensive
+
+
+def validate_no_leakage(df: pd.DataFrame, features: list, target_col: str = None) -> bool:
+    """
+    Validate that features don't contain data leakage.
+    
+    Args:
+        df: DataFrame with features and target
+        features: List of feature column names
+        target_col: Name of target column (optional, will try to infer)
+    
+    Returns:
+        True if no leakage detected, False otherwise
+    """
+    if target_col is None:
+        # Try to find target column
+        target_candidates = [col for col in df.columns if col in ['target', 'label', 'y', 'home_won', 'covered', 'over']]
+        if target_candidates:
+            target_col = target_candidates[0]
+        else:
+            print("⚠️  Could not find target column for leakage validation")
+            return True
+    
+    if target_col not in df.columns:
+        print("⚠️  Target column not found in dataframe")
+        return True
+    
+    warnings = []
+    errors = []
+    
+    # Check for suspicious correlations (>0.90)
+    for feat in features:
+        if feat not in df.columns:
+            continue
+        try:
+            corr = df[[feat, target_col]].corr().iloc[0, 1]
+            if not pd.isna(corr) and abs(corr) > 0.90:
+                warnings.append(f"High correlation: {feat} = {corr:.4f}")
+        except:
+            pass
+    
+    # Check for outcome variable keywords in feature names
+    outcome_keywords = ['final', 'result', 'actual', 'score_diff', 'winner', 'won', 'outcome']
+    for feat in features:
+        if any(kw in feat.lower() for kw in outcome_keywords):
+            # Allow some legitimate features like "home_wins_last_5" (past games)
+            if not any(past_kw in feat.lower() for past_kw in ['last_', 'recent', 'avg', 'rolling', 'history']):
+                errors.append(f"Outcome variable in features: {feat}")
+    
+    # Check for direct leakage features
+    leakage_features = ['spread_value', 'totals_value', 'home_cover_prob', 'over_prob', 
+                       'spread_edge', 'totals_edge', 'cover', 'actual_']
+    for feat in features:
+        if any(leak in feat.lower() for leak in leakage_features):
+            errors.append(f"Known leakage feature: {feat}")
+    
+    if warnings:
+        print("⚠️  Leakage warnings:")
+        for w in warnings[:10]:  # Show first 10
+            print(f"   {w}")
+    
+    if errors:
+        print("❌ Leakage errors detected:")
+        for e in errors:
+            print(f"   {e}")
+        return False
+    
+    if not warnings and not errors:
+        print("✓ Leakage validation passed")
+    
+    return len(errors) == 0
 from app.config import settings
 
 
@@ -221,6 +292,12 @@ def train_model_for_market(
     
     X = df[available_cols].copy()
     
+    # Validate no data leakage before training
+    print("Validating features for data leakage...")
+    temp_df = df.copy()
+    temp_df['target'] = y
+    validate_no_leakage(temp_df, available_cols, target_col='target')
+    
     # Remove rows with NaN in features or labels
     mask = ~(X.isna().any(axis=1) | y.isna())
     X = X[mask]
@@ -242,6 +319,21 @@ def train_model_for_market(
     
     train_idx = train_df.index
     val_idx = val_df.index
+    
+    # Verify temporal split (no data leakage)
+    if "date" in df.columns:
+        train_dates = df.loc[train_idx, "date"]
+        val_dates = df.loc[val_idx, "date"]
+        train_max_date = pd.to_datetime(train_dates).max()
+        val_min_date = pd.to_datetime(val_dates).min()
+        
+        print(f"Train period: {train_dates.min()} to {train_dates.max()}")
+        print(f"Val period: {val_dates.min()} to {val_dates.max()}")
+        
+        if train_max_date >= val_min_date:
+            print(f"⚠️  WARNING: Temporal leakage detected! Train max ({train_max_date}) >= Val min ({val_min_date})")
+        else:
+            print(f"✓ Temporal split verified: Train ends before Val starts")
     
     X_train = X.loc[train_idx]
     y_train = y.loc[train_idx]
@@ -280,14 +372,38 @@ def train_model_for_market(
         y_val_pred = model.predict(X_val_scaled)
         y_val_pred_proba = None  # Not applicable for regression
     else:
-        # Classification model
+        # Classification model with regularization to prevent overfitting
         ModelClass = get_model_class(algorithm, model_type="classification")
-        model = ModelClass(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            learning_rate=learning_rate,
-            random_state=42
-        )
+        
+        # Add regularization parameters for XGBoost/LightGBM to prevent overfitting
+        model_params = {
+            "n_estimators": n_estimators,
+            "max_depth": max_depth,
+            "learning_rate": learning_rate,
+            "random_state": 42
+        }
+        
+        # Add regularization if using XGBoost or LightGBM
+        if algorithm.lower() in ["xgboost", "xgb"]:
+            model_params.update({
+                "max_depth": min(max_depth, 3),  # Prevent deep memorization
+                "min_child_weight": 5,  # Require 5+ samples per leaf
+                "subsample": 0.8,  # Use 80% of rows per tree
+                "colsample_bytree": 0.8,  # Use 80% of features per tree
+                "reg_alpha": 1.0,  # L1 regularization
+                "reg_lambda": 1.0,  # L2 regularization
+            })
+        elif algorithm.lower() in ["lightgbm", "lgb"]:
+            model_params.update({
+                "max_depth": min(max_depth, 3),
+                "min_child_samples": 5,
+                "subsample": 0.8,
+                "colsample_bytree": 0.8,
+                "reg_alpha": 1.0,
+                "reg_lambda": 1.0,
+            })
+        
+        model = ModelClass(**model_params)
         model.fit(X_train_scaled, y_train)
         
         # Predictions

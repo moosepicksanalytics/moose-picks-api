@@ -530,22 +530,17 @@ def calculate_betting_market_features(df: pd.DataFrame) -> pd.DataFrame:
         df["away_implied_prob"] = df["away_moneyline"].apply(ml_to_prob)
         df["market_total_prob"] = df["home_implied_prob"] + df["away_implied_prob"]
     
-    # Spread value (difference between expected margin and spread)
-    if "spread" in df.columns:
-        home_diff_col = "home_point_diff_avg_10" if "home_point_diff_avg_10" in df.columns else "home_point_diff_avg"
-        if home_diff_col in df.columns:
-            home_diff = df[home_diff_col].fillna(0)
-        else:
-            home_diff = pd.Series([0] * len(df))
-        df["spread_value"] = home_diff - df["spread"].fillna(0)
-    
-    # Totals value (difference between expected total and over/under)
-    if "over_under" in df.columns:
-        home_col = "home_points_for_avg_10" if "home_points_for_avg_10" in df.columns else "home_points_for_avg"
-        away_col = "away_points_for_avg_10" if "away_points_for_avg_10" in df.columns else "away_points_for_avg"
-        home_avg = df[home_col].fillna(0) if home_col in df.columns else pd.Series([0] * len(df))
-        away_avg = df[away_col].fillna(0) if away_col in df.columns else pd.Series([0] * len(df))
-        df["totals_value"] = (home_avg + away_avg) - df["over_under"].fillna(0)
+    # REMOVED: spread_value and totals_value calculation
+    # These features cause data leakage because they directly encode the prediction target:
+    # - spread_value > 0 means "cover", spread_value < 0 means "don't cover" (directly encodes label)
+    # - totals_value > 0 means "over", totals_value < 0 means "under" (directly encodes label)
+    # Even if calculated from rolling averages, these features allow the model to trivially predict outcomes
+    # by learning: if spread_value > 0, predict 1, else predict 0
+    # 
+    # If we need market value features in the future, they should be calculated differently:
+    # - Use pre-game projections from separate models, not rolling averages
+    # - Or use betting market implied probabilities only (which we already have)
+    pass
     
     return df
 
