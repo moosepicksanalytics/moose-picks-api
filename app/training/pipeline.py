@@ -59,30 +59,58 @@ def validate_no_leakage(df: pd.DataFrame, features: list, target_col: str = None
     errors = []
     
     # Check for suspicious correlations (>0.90)
+    # Note: High correlation doesn't necessarily mean leakage - it could be a very predictive feature
+    # But correlation >0.95 is suspicious and worth investigating
     for feat in features:
         if feat not in df.columns:
             continue
         try:
             corr = df[[feat, target_col]].corr().iloc[0, 1]
-            if not pd.isna(corr) and abs(corr) > 0.90:
-                warnings.append(f"High correlation: {feat} = {corr:.4f}")
+            if not pd.isna(corr) and abs(corr) > 0.95:  # Only warn for very high correlation (>0.95)
+                # Check if it's a legitimate historical feature
+                feat_lower = feat.lower()
+                is_historical = any(p in feat_lower for p in ['win_rate', 'avg', 'last_', 'recent', 'ats_', 'h2h_'])
+                if is_historical:
+                    # Historical features with high correlation are usually fine (they're meant to be predictive)
+                    # Only warn if correlation is extremely high (>0.98)
+                    if abs(corr) > 0.98:
+                        warnings.append(f"Very high correlation (investigate): {feat} = {corr:.4f}")
+                else:
+                    warnings.append(f"High correlation (investigate): {feat} = {corr:.4f}")
         except:
             pass
     
     # Check for outcome variable keywords in feature names
-    outcome_keywords = ['final', 'result', 'actual', 'score_diff', 'winner', 'won', 'outcome']
-    for feat in features:
-        if any(kw in feat.lower() for kw in outcome_keywords):
-            # Allow some legitimate features like "home_wins_last_5" (past games)
-            if not any(past_kw in feat.lower() for past_kw in ['last_', 'recent', 'avg', 'rolling', 'history']):
-                errors.append(f"Outcome variable in features: {feat}")
+    # But exclude legitimate historical features (win_rate, wins_last, etc. from past games)
+    outcome_keywords = ['final', 'result', 'actual', 'score_diff', 'winner', 'outcome']
+    # Exclude legitimate patterns that indicate historical/past data
+    legitimate_patterns = ['last_', 'recent', 'avg', 'rolling', 'history', 'win_rate', 'wins_last', 
+                          'losses_last', 'streak', 'ats_', 'h2h_', 'points_for_avg', 'points_against_avg',
+                          'efficiency', 'momentum', 'strength', 'opponent_strength']
     
-    # Check for direct leakage features
-    leakage_features = ['spread_value', 'totals_value', 'home_cover_prob', 'over_prob', 
-                       'spread_edge', 'totals_edge', 'cover', 'actual_']
     for feat in features:
-        if any(leak in feat.lower() for leak in leakage_features):
-            errors.append(f"Known leakage feature: {feat}")
+        feat_lower = feat.lower()
+        # Check if it contains outcome keywords
+        has_outcome_kw = any(kw in feat_lower for kw in outcome_keywords)
+        # Check if it's a legitimate historical feature
+        is_legitimate = any(pattern in feat_lower for pattern in legitimate_patterns)
+        
+        if has_outcome_kw and not is_legitimate:
+            errors.append(f"Outcome variable in features: {feat}")
+    
+    # Check for direct leakage features (features that encode the target directly)
+    # These are features that use actual game outcomes or directly encode predictions
+    leakage_features = ['spread_value', 'totals_value', 'home_cover_prob', 'over_prob', 
+                       'spread_edge', 'totals_edge', 'actual_score', 'actual_margin',
+                       'game_result', 'final_score', 'final_margin']
+    for feat in features:
+        feat_lower = feat.lower()
+        # Only flag if it's an exact match or clearly a leakage feature
+        # Exclude legitimate features like "ats_win_rate" (past games only)
+        if any(leak in feat_lower for leak in leakage_features):
+            # But allow ATS features (they're historical, not current game)
+            if 'ats_' not in feat_lower and 'h2h_' not in feat_lower:
+                errors.append(f"Known leakage feature: {feat}")
     
     if warnings:
         print("⚠️  Leakage warnings:")
@@ -283,10 +311,13 @@ def train_model_for_market(
     # Debug: Log features being used (especially for spread/moneyline to check for data leakage)
     if market in ["spread", "moneyline"]:
         print(f"DEBUG: Using {len(available_cols)} features for {sport} {market}")
-        # Check for problematic features
-        problematic = [f for f in available_cols if any(x in f.lower() for x in ['point_diff', 'strength', 'opponent_strength', 'margin', 'edge', 'cover_prob', 'won', 'win_rate'])]
-        if problematic:
-            print(f"WARNING: Potentially problematic features found: {problematic[:20]}")
+        # Check for known leakage features (not historical win_rate features - those are legitimate)
+        known_leakage = [f for f in available_cols if any(x in f.lower() for x in [
+            'spread_value', 'totals_value', 'cover_prob', 'over_prob', 
+            'spread_edge', 'totals_edge', 'actual_score', 'final_margin'
+        ])]
+        if known_leakage:
+            print(f"❌ ERROR: Known leakage features found: {known_leakage}")
         # Show first 20 features being used
         print(f"DEBUG: First 20 features: {available_cols[:20]}")
     

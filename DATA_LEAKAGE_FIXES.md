@@ -7,6 +7,8 @@
 
 All critical data leakage issues identified in the overfitting action plan have been addressed. The models should now show realistic accuracy metrics (50-55% for spread, 55-65% for moneyline) instead of the impossible 100% accuracies.
 
+**Important Note**: The 100% accuracy issue is NOT caused by missing odds data. Missing odds would actually LOWER accuracy, not raise it to 100%. The issue was data leakage (features that encode the target variable), which we've now fixed. However, backfilling odds data is still recommended for complete features and better model performance.
+
 ## Fixes Implemented
 
 ### 1. ✅ Removed `spread_value` and `totals_value` Calculation
