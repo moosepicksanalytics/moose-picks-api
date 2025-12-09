@@ -477,19 +477,48 @@ def train_model_for_market(
         model = ModelClass(**model_params)
         model.fit(X_train_scaled, y_train)
         
-        # Calibrate the model for better probability estimates
-        # Use isotonic for larger datasets, sigmoid for smaller ones
-        calibration_method = 'isotonic' if len(X_train_scaled) > 1000 else 'sigmoid'
-        print(f"Calibrating model using {calibration_method} method...")
-        calibrated_model = CalibratedClassifierCV(
-            model,
-            method=calibration_method,
-            cv=min(5, len(X_train_scaled) // 100)  # Use fewer folds for small datasets
-        )
-        calibrated_model.fit(X_train_scaled, y_train)
-        
-        # Use calibrated model for predictions
-        model = calibrated_model
+        # Verify model is a classifier (not regressor)
+        from sklearn.base import is_classifier
+        if not is_classifier(model):
+            print(f"⚠️  Warning: Model is not a classifier, skipping calibration")
+        else:
+            # Calibrate the model for better probability estimates
+            # Use prefit mode: train model first, then calibrate on validation set
+            # This avoids cross-validation issues with XGBoost
+            try:
+                calibration_method = 'isotonic' if len(X_train_scaled) > 1000 else 'sigmoid'
+                print(f"Calibrating model using {calibration_method} method (prefit mode)...")
+                
+                # Use prefit mode: model is already trained, calibrate on validation data
+                # Split validation set for calibration
+                from sklearn.model_selection import train_test_split
+                if len(X_val_scaled) > 100:
+                    X_cal, X_val_final, y_cal, y_val_final = train_test_split(
+                        X_val_scaled, y_val, test_size=0.5, random_state=42, 
+                        stratify=y_val if len(np.unique(y_val)) > 1 else None
+                    )
+                else:
+                    # If validation set is small, use all of it for calibration
+                    X_cal, X_val_final, y_cal, y_val_final = X_val_scaled, X_val_scaled, y_val, y_val
+                
+                calibrated_model = CalibratedClassifierCV(
+                    model,
+                    method=calibration_method,
+                    cv='prefit'  # Use prefit mode - model is already trained
+                )
+                calibrated_model.fit(X_cal, y_cal)
+                
+                # Use calibrated model for predictions, but use final validation set for evaluation
+                model = calibrated_model
+                X_val_scaled = X_val_final
+                y_val = y_val_final
+                print("✓ Model calibration successful")
+            except Exception as cal_error:
+                print(f"⚠️  Warning: Model calibration failed: {cal_error}")
+                print("  Continuing with uncalibrated model (probabilities may be less accurate)")
+                import traceback
+                traceback.print_exc()
+                # Continue with uncalibrated model
         
         # Predictions
         y_train_pred = model.predict(X_train_scaled)
