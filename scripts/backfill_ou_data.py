@@ -184,27 +184,39 @@ def validate_ou_coverage(sport: str, min_games: int = 100):
     db = SessionLocal()
     
     try:
-        # Count total final games
+        # Count total final games - use same status matching as backfill
         total_games = db.query(func.count(Game.id)).filter(
             Game.sport == sport,
-            Game.status == "final"
+            or_(
+                Game.status.ilike("%final%"),
+                Game.status == "final",
+                Game.status == "STATUS_FINAL"
+            )
         ).scalar()
         
-        # Count games with O/U result
+        # Count games with O/U result - use same status matching
         games_with_ou = db.query(func.count(Game.id)).filter(
             Game.sport == sport,
-            Game.status == "final",
+            or_(
+                Game.status.ilike("%final%"),
+                Game.status == "final",
+                Game.status == "STATUS_FINAL"
+            ),
             Game.ou_result.isnot(None)
         ).scalar()
         
         # Get distribution - query for all non-null, non-empty ou_result values
-        # Simple approach: group by ou_result and normalize in Python
+        # Use same status matching as backfill to ensure consistency
         distribution_query = db.query(
             Game.ou_result,
             func.count(Game.id).label('count')
         ).filter(
             Game.sport == sport,
-            Game.status == "final",
+            or_(
+                Game.status.ilike("%final%"),
+                Game.status == "final",
+                Game.status == "STATUS_FINAL"
+            ),
             Game.ou_result.isnot(None)
         ).group_by(Game.ou_result).all()
         
@@ -236,7 +248,11 @@ def validate_ou_coverage(sport: str, min_games: int = 100):
             # Check what ou_result values actually exist
             sample_results = db.query(Game.ou_result).filter(
                 Game.sport == sport,
-                Game.status == "final",
+                or_(
+                    Game.status.ilike("%final%"),
+                    Game.status == "final",
+                    Game.status == "STATUS_FINAL"
+                ),
                 Game.ou_result.isnot(None)
             ).limit(10).all()
             sample_values = [repr(r[0]) for r in sample_results]  # Use repr to see exact values
@@ -246,7 +262,11 @@ def validate_ou_coverage(sport: str, min_games: int = 100):
             # Check for empty strings
             empty_string_count = db.query(func.count(Game.id)).filter(
                 Game.sport == sport,
-                Game.status == "final",
+                or_(
+                    Game.status.ilike("%final%"),
+                    Game.status == "final",
+                    Game.status == "STATUS_FINAL"
+                ),
                 Game.ou_result == ''
             ).scalar()
             if empty_string_count > 0:
@@ -255,7 +275,11 @@ def validate_ou_coverage(sport: str, min_games: int = 100):
             # Check total count vs what we're grouping
             total_with_result = db.query(func.count(Game.id)).filter(
                 Game.sport == sport,
-                Game.status == "final",
+                or_(
+                    Game.status.ilike("%final%"),
+                    Game.status == "final",
+                    Game.status == "STATUS_FINAL"
+                ),
                 Game.ou_result.isnot(None),
                 Game.ou_result != ''
             ).scalar()
@@ -282,17 +306,29 @@ def validate_ou_coverage(sport: str, min_games: int = 100):
             # Try a direct count to verify
             over_count = db.query(func.count(Game.id)).filter(
                 Game.sport == sport,
-                Game.status == "final",
+                or_(
+                    Game.status.ilike("%final%"),
+                    Game.status == "final",
+                    Game.status == "STATUS_FINAL"
+                ),
                 Game.ou_result == "OVER"
             ).scalar()
             under_count = db.query(func.count(Game.id)).filter(
                 Game.sport == sport,
-                Game.status == "final",
+                or_(
+                    Game.status.ilike("%final%"),
+                    Game.status == "final",
+                    Game.status == "STATUS_FINAL"
+                ),
                 Game.ou_result == "UNDER"
             ).scalar()
             push_count = db.query(func.count(Game.id)).filter(
                 Game.sport == sport,
-                Game.status == "final",
+                or_(
+                    Game.status.ilike("%final%"),
+                    Game.status == "final",
+                    Game.status == "STATUS_FINAL"
+                ),
                 Game.ou_result == "PUSH"
             ).scalar()
             logger.info(f"  Direct counts - OVER: {over_count}, UNDER: {under_count}, PUSH: {push_count}")
