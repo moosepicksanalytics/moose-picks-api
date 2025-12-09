@@ -445,6 +445,22 @@ def predict_for_game(
         if abs(ml_edges["best_edge"]) > 0.10:
             logger.warning(f"Unrealistic moneyline edge: {ml_edges['best_edge']:.1%}")
         
+        # Validate probabilities before storing
+        from app.prediction.validation import validate_prediction_before_storage
+        if ml_edges["best_side"]:
+            best_prob = ml_prob_adj if ml_edges["best_side"] == "home" else away_win_prob_adj
+            validation = validate_prediction_before_storage(
+                game.id,
+                sport,
+                "moneyline",
+                best_prob,
+                game.home_moneyline,
+                game.away_moneyline
+            )
+            if validation.get("warnings"):
+                for warning in validation["warnings"]:
+                    logger.warning(f"  {warning}")
+        
         predictions["moneyline"] = {
             "home_win_prob": ml_prob_adj,
             "away_win_prob": away_win_prob_adj,

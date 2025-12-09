@@ -658,6 +658,33 @@ def train_model_for_market(
         model_type=model_type
     )
     
+    # Print calibration summary
+    if model_type == "classification" and "ece" in eval_results:
+        ece = eval_results.get("ece", np.nan)
+        brier = eval_results.get("brier_score", np.nan)
+        print(f"\n📊 Calibration Metrics:")
+        print(f"  Expected Calibration Error (ECE): {ece:.4f}")
+        print(f"  Brier Score: {brier:.4f}")
+        
+        if not np.isnan(ece):
+            if ece < 0.05:
+                print(f"  ✓ Model is well-calibrated (ECE < 0.05)")
+            elif ece < 0.10:
+                print(f"  ⚠️  Model calibration is acceptable (ECE < 0.10)")
+                print(f"     Consider adding probability calibration for better accuracy.")
+            else:
+                print(f"  ✗ Model calibration is poor (ECE > 0.10)")
+                print(f"     Model probabilities may not be reliable. Review model training.")
+        
+        if not np.isnan(brier):
+            # Brier score: lower is better (0 = perfect, 0.25 = random)
+            if brier < 0.15:
+                print(f"  ✓ Good Brier score (predictions are confident and accurate)")
+            elif brier < 0.20:
+                print(f"  ⚠️  Acceptable Brier score")
+            else:
+                print(f"  ⚠️  High Brier score - model may be underconfident or inaccurate")
+    
     # Save model
     if model_version is None:
         model_version = datetime.now().strftime("%Y%m%d_%H%M%S")
