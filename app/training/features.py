@@ -799,7 +799,8 @@ def calculate_market_specific_features(
                 home_avg_diff = df[home_diff_col].fillna(0)
             else:
                 home_avg_diff = pd.Series([0] * len(df))
-            df["home_cover_prob"] = ((home_avg_diff - df["spread_line"]) > 0).astype(float)
+            # REMOVED: home_cover_prob - this was data leakage (directly encoding the label)
+            # Keep spread_edge as it's useful without directly encoding the outcome
             df["spread_edge"] = home_avg_diff - df["spread_line"]
     
     elif market == "totals":
@@ -811,7 +812,8 @@ def calculate_market_specific_features(
         df["total_projection"] = home_avg + away_avg
         if "over_under" in df.columns:
             df["over_under_line"] = df["over_under"].fillna(df["total_projection"])
-            df["over_prob"] = (df["total_projection"] > df["over_under_line"]).astype(float)
+            # REMOVED: over_prob - this was data leakage (directly encoding the label)
+            # Keep totals_edge as it's useful without directly encoding the outcome
             df["totals_edge"] = df["total_projection"] - df["over_under_line"]
     
     elif market == "score_projection":
@@ -1177,14 +1179,14 @@ def get_feature_columns(sport: str, market: str) -> List[str]:
     if market == "spread":
         market_features = [
             "spread_line",
-            "home_cover_prob",
+            # REMOVED: "home_cover_prob" - data leakage (directly encodes label)
             "spread_edge",
         ]
     elif market == "totals":
         market_features = [
             "total_projection",
             "over_under_line",
-            "over_prob",
+            # REMOVED: "over_prob" - data leakage (directly encodes label)
             "totals_edge",
         ]
     elif market == "score_projection":
