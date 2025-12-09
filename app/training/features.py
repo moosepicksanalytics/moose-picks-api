@@ -792,16 +792,11 @@ def calculate_market_specific_features(
     
     if market == "spread":
         # Spread-specific features
-        if "spread" in df.columns:
-            df["spread_line"] = df["spread"].fillna(0)
-            home_diff_col = "home_point_diff_avg_10" if "home_point_diff_avg_10" in df.columns else "home_point_diff_avg"
-            if home_diff_col in df.columns:
-                home_avg_diff = df[home_diff_col].fillna(0)
-            else:
-                home_avg_diff = pd.Series([0] * len(df))
-            # REMOVED: home_cover_prob - this was data leakage (directly encoding the label)
-            # REMOVED: spread_edge - this was also data leakage (edge > 0 = cover, edge < 0 = don't cover)
-            # The model can learn: if spread_edge > 0, predict 1, else predict 0
+        # REMOVED: spread_line - allows model to reconstruct edge with home_point_diff_avg
+        # REMOVED: home_cover_prob - this was data leakage (directly encoding the label)
+        # REMOVED: spread_edge - this was also data leakage (edge > 0 = cover, edge < 0 = don't cover)
+        # The model can learn: if spread_edge > 0, predict 1, else predict 0
+        pass  # No spread-specific features to avoid data leakage
     
     elif market == "totals":
         # Totals-specific features
@@ -810,11 +805,10 @@ def calculate_market_specific_features(
         home_avg = df[home_col].fillna(0) if home_col in df.columns else pd.Series([0] * len(df))
         away_avg = df[away_col].fillna(0) if away_col in df.columns else pd.Series([0] * len(df))
         df["total_projection"] = home_avg + away_avg
-        if "over_under" in df.columns:
-            df["over_under_line"] = df["over_under"].fillna(df["total_projection"])
-            # REMOVED: over_prob - this was data leakage (directly encoding the label)
-            # REMOVED: totals_edge - this was also data leakage (edge > 0 = over, edge < 0 = under)
-            # The model can learn: if totals_edge > 0, predict 1, else predict 0
+        # REMOVED: over_under_line - allows model to reconstruct edge with total_projection
+        # REMOVED: over_prob - this was data leakage (directly encoding the label)
+        # REMOVED: totals_edge - this was also data leakage (edge > 0 = over, edge < 0 = under)
+        # The model can learn: if totals_edge > 0, predict 1, else predict 0
     
     elif market == "score_projection":
         # Score projection features
@@ -1178,14 +1172,14 @@ def get_feature_columns(sport: str, market: str) -> List[str]:
     # Market-specific features
     if market == "spread":
         market_features = [
-            "spread_line",
+            # REMOVED: "spread_line" - allows model to reconstruct edge with home_point_diff_avg
             # REMOVED: "home_cover_prob" - data leakage (directly encodes label)
             # REMOVED: "spread_edge" - data leakage (edge > 0 = cover, edge < 0 = don't cover)
         ]
     elif market == "totals":
         market_features = [
-            "total_projection",
-            "over_under_line",
+            "total_projection",  # Keep this - it's the expected total, not the betting line
+            # REMOVED: "over_under_line" - allows model to reconstruct edge with total_projection
             # REMOVED: "over_prob" - data leakage (directly encodes label)
             # REMOVED: "totals_edge" - data leakage (edge > 0 = over, edge < 0 = under)
         ]
