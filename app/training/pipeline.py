@@ -452,31 +452,37 @@ def train_model_for_market(
     if valid_samples < total_samples:
         print(f"  ⚠️  Filtering: {total_samples} -> {valid_samples} valid samples")
     
-    X = X[mask]
-    y = y[mask]
+    # Filter data and reset index to avoid index mismatches
+    df_filtered = df[mask].copy().reset_index(drop=True)
+    X = X[mask].reset_index(drop=True)
+    y = y[mask].reset_index(drop=True)
     
     if len(X) == 0:
         error_msg = f"No valid samples after cleaning (total: {total_samples}, NaN labels: {nan_labels}, NaN features: {nan_features})"
         return {"success": False, "error": error_msg}
     
-    # Train/validation split
+    # Train/validation split (use filtered dataframe with reset index)
     split_strategy = config.get("split_strategy", "season")
     validation_seasons = config.get("validation_seasons", 1)
     
     if split_strategy == "season":
-        train_df, val_df = split_by_season(df[mask], validation_seasons)
+        train_df, val_df = split_by_season(df_filtered, validation_seasons)
     elif split_strategy == "week":
-        train_df, val_df = split_by_week(df[mask], validation_seasons)
+        train_df, val_df = split_by_week(df_filtered, validation_seasons)
     else:
-        train_df, val_df = split_random(df[mask], test_size=0.2)
+        train_df, val_df = split_random(df_filtered, test_size=0.2)
+    
+    # Reset index on split dataframes to ensure clean integer indices
+    train_df = train_df.reset_index(drop=True)
+    val_df = val_df.reset_index(drop=True)
     
     train_idx = train_df.index
     val_idx = val_df.index
     
     # Verify temporal split (no data leakage)
-    if "date" in df.columns:
-        train_dates = df.loc[train_idx, "date"]
-        val_dates = df.loc[val_idx, "date"]
+    if "date" in df_filtered.columns:
+        train_dates = train_df["date"]
+        val_dates = val_df["date"]
         train_max_date = pd.to_datetime(train_dates).max()
         val_min_date = pd.to_datetime(val_dates).min()
         
@@ -488,10 +494,11 @@ def train_model_for_market(
         else:
             print(f"✓ Temporal split verified: Train ends before Val starts")
     
-    X_train = X.loc[train_idx]
-    y_train = y.loc[train_idx]
-    X_val = X.loc[val_idx]
-    y_val = y.loc[val_idx]
+    # Use integer indices (after reset_index, these are 0-based sequential)
+    X_train = X.iloc[train_idx]
+    y_train = y.iloc[train_idx]
+    X_val = X.iloc[val_idx]
+    y_val = y.iloc[val_idx]
     
     print(f"Training samples: {len(X_train)}, Validation samples: {len(X_val)}")
     

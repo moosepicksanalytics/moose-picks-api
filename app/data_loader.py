@@ -211,10 +211,20 @@ def split_temporal(
     split_idx = int(len(df) * (1 - test_size))
     
     # Ensure we split at a date boundary (no overlap)
+    # Get the date at the split index
     split_date = df.iloc[split_idx]["date_dt"]
     
+    # Find the last row with a date strictly before split_date
+    # This ensures all games on split_date go to validation (no overlap)
     train_df = df[df["date_dt"] < split_date].copy()
     val_df = df[df["date_dt"] >= split_date].copy()
+    
+    # If train_df is empty or too small, adjust split_date to previous date
+    if len(train_df) < len(df) * 0.1:  # Less than 10% in train
+        # Move split to previous date
+        prev_date = df.iloc[max(0, split_idx - 1)]["date_dt"]
+        train_df = df[df["date_dt"] < prev_date].copy()
+        val_df = df[df["date_dt"] >= prev_date].copy()
     
     return train_df.drop(columns=["date_dt"]), val_df.drop(columns=["date_dt"])
 
