@@ -107,6 +107,8 @@ def split_by_season(
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Split data by season, holding out the last N seasons for validation.
+    If the validation set would be too small (<10% of data), falls back to
+    a percentage-based temporal split to ensure adequate validation data.
     
     Args:
         df: DataFrame with game data (must have 'date' column)
@@ -128,15 +130,23 @@ def split_by_season(
     
     if len(years) <= validation_seasons:
         # Not enough seasons, use 80/20 split
-        split_idx = int(len(df) * 0.8)
-        train_df = df.iloc[:split_idx].copy()
-        val_df = df.iloc[split_idx:].copy()
+        print(f"  ⚠️  Only {len(years)} season(s) available, using 80/20 temporal split")
+        return split_temporal(df.drop(columns=["year"]), test_size=0.2)
     else:
         val_years = set(years[-validation_seasons:])
         train_df = df[~df["year"].isin(val_years)].copy()
         val_df = df[df["year"].isin(val_years)].copy()
-    
-    return train_df.drop(columns=["year"]), val_df.drop(columns=["year"])
+        
+        # Check if validation set is too small (<10% of total data)
+        val_ratio = len(val_df) / len(df)
+        if val_ratio < 0.1:
+            print(f"  ⚠️  Validation set too small ({len(val_df)} samples, {val_ratio:.1%} of data)")
+            print(f"  ⚠️  Val years {sorted(val_years)} appear incomplete. Using 80/20 temporal split instead")
+            return split_temporal(df.drop(columns=["year"]), test_size=0.2)
+        else:
+            print(f"  ✓ Using season-based split: {len(train_df)} train, {len(val_df)} val ({val_ratio:.1%})")
+            print(f"  ✓ Validation years: {sorted(val_years)}")
+            return train_df.drop(columns=["year"]), val_df.drop(columns=["year"])
 
 
 def split_by_week(
