@@ -261,6 +261,50 @@ def trigger_backfill_ou_data(
     }
 
 
+@router.get("/debug-ou-results")
+def debug_ou_results(sport: str):
+    """
+    Debug endpoint to see what ou_result values actually exist in database.
+    
+    Args:
+        sport: Sport code (NFL, NHL, NBA, MLB)
+    
+    Returns:
+        Sample of ou_result values and counts
+    """
+    from app.database import SessionLocal
+    from app.models.db_models import Game
+    from sqlalchemy import func
+    
+    db = SessionLocal()
+    try:
+        # Get sample of actual ou_result values
+        samples = db.query(Game.ou_result).filter(
+            Game.sport == sport.upper(),
+            Game.status == "final",
+            Game.ou_result.isnot(None)
+        ).limit(20).all()
+        
+        # Get counts by exact value
+        exact_counts = db.query(
+            Game.ou_result,
+            func.count(Game.id).label('count')
+        ).filter(
+            Game.sport == sport.upper(),
+            Game.status == "final",
+            Game.ou_result.isnot(None)
+        ).group_by(Game.ou_result).limit(10).all()
+        
+        return {
+            "sport": sport.upper(),
+            "sample_values": [repr(r[0]) for r in samples],
+            "exact_counts": {str(r[0]): int(r[1]) for r in exact_counts if r[0]},
+            "total_with_ou_result": len(samples)
+        }
+    finally:
+        db.close()
+
+
 @router.get("/validate-ou-coverage")
 def get_ou_coverage(sport: Optional[str] = None):
     """

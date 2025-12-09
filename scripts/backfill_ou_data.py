@@ -97,8 +97,13 @@ def backfill_ou_for_sport(sport: str, start_date: datetime = None, end_date: dat
                         updates_made.append("closing_total")
                 
                 # Update ou_result if we can calculate it (requires both actual_total and closing_total)
+                # Force update if current value is None, empty string, or different
                 if ou_data['ou_result'] is not None:
-                    if game.ou_result != ou_data['ou_result']:
+                    current_result = str(game.ou_result).strip() if game.ou_result else ""
+                    new_result = str(ou_data['ou_result']).strip()
+                    
+                    # Update if different, or if current is empty/None
+                    if current_result != new_result or not current_result:
                         game.ou_result = ou_data['ou_result']
                         needs_update = True
                         updates_made.append("ou_result")
@@ -192,34 +197,69 @@ def validate_ou_coverage(sport: str, min_games: int = 100):
             Game.ou_result.isnot(None)
         ).scalar()
         
-        # Get distribution - also check for empty strings
+        # Get distribution - query for all non-null, non-empty ou_result values
+        # Simple approach: group by ou_result and normalize in Python
         distribution_query = db.query(
             Game.ou_result,
             func.count(Game.id).label('count')
         ).filter(
             Game.sport == sport,
             Game.status == "final",
-            Game.ou_result.isnot(None),
-            Game.ou_result != ''  # Exclude empty strings
+            Game.ou_result.isnot(None)
         ).group_by(Game.ou_result).all()
         
-        # Build distribution dictionary, ensuring all values are properly converted
+        # Build distribution dictionary, normalizing values
         distribution = {}
         for row in distribution_query:
             ou_result = row[0]
             count = int(row[1]) if row[1] is not None else 0
-            if ou_result and str(ou_result).strip():  # Ensure not None and not empty
-                distribution[str(ou_result).strip()] = count
+            
+            # Skip None, empty strings, and whitespace-only values
+            if not ou_result:
+                continue
+            
+            ou_result_str = str(ou_result).strip()
+            if not ou_result_str or ou_result_str.lower() == 'none':
+                continue
+            
+            # Normalize to uppercase for consistency
+            ou_result_normalized = ou_result_str.upper()
+            
+            # Aggregate counts for same normalized value (case-insensitive)
+            if ou_result_normalized in distribution:
+                distribution[ou_result_normalized] += count
+            else:
+                distribution[ou_result_normalized] = count
         
-        # Debug: Log if we have games with O/U data but no distribution
+        # Debug: If we have games with O/U data but no distribution, investigate
         if games_with_ou > 0 and len(distribution) == 0:
             # Check what ou_result values actually exist
             sample_results = db.query(Game.ou_result).filter(
                 Game.sport == sport,
                 Game.status == "final",
                 Game.ou_result.isnot(None)
-            ).limit(5).all()
-            logger.warning(f"  ⚠️  Warning: {games_with_ou} games have ou_result but distribution is empty. Sample values: {[r[0] for r in sample_results]}")
+            ).limit(10).all()
+            sample_values = [repr(r[0]) for r in sample_results]  # Use repr to see exact values
+            logger.warning(f"  ⚠️  Warning: {games_with_ou} games have ou_result but distribution is empty.")
+            logger.warning(f"  Sample ou_result values (first 10): {sample_values}")
+            
+            # Check for empty strings
+            empty_string_count = db.query(func.count(Game.id)).filter(
+                Game.sport == sport,
+                Game.status == "final",
+                Game.ou_result == ''
+            ).scalar()
+            if empty_string_count > 0:
+                logger.warning(f"  Found {empty_string_count} games with empty string ou_result")
+            
+            # Check total count vs what we're grouping
+            total_with_result = db.query(func.count(Game.id)).filter(
+                Game.sport == sport,
+                Game.status == "final",
+                Game.ou_result.isnot(None),
+                Game.ou_result != ''
+            ).scalar()
+            logger.warning(f"  Games with non-empty ou_result: {total_with_result}")
         
         coverage = {
             'sport': sport,
@@ -231,7 +271,32 @@ def validate_ou_coverage(sport: str, min_games: int = 100):
         }
         
         logger.info(f"O/U Coverage {sport}: {coverage['coverage_pct']:.1f}% ({games_with_ou}/{total_games})")
-        logger.info(f"  Distribution: {coverage['distribution']}")
+        
+        # Log distribution with more detail
+        if distribution:
+            logger.info(f"  Distribution: {distribution}")
+            for result_type, count in distribution.items():
+                logger.info(f"    {result_type}: {count}")
+        else:
+            logger.warning(f"  ⚠️  Distribution is empty despite {games_with_ou} games with ou_result")
+            # Try a direct count to verify
+            over_count = db.query(func.count(Game.id)).filter(
+                Game.sport == sport,
+                Game.status == "final",
+                Game.ou_result == "OVER"
+            ).scalar()
+            under_count = db.query(func.count(Game.id)).filter(
+                Game.sport == sport,
+                Game.status == "final",
+                Game.ou_result == "UNDER"
+            ).scalar()
+            push_count = db.query(func.count(Game.id)).filter(
+                Game.sport == sport,
+                Game.status == "final",
+                Game.ou_result == "PUSH"
+            ).scalar()
+            logger.info(f"  Direct counts - OVER: {over_count}, UNDER: {under_count}, PUSH: {push_count}")
+        
         logger.info(f"  Can train: {coverage['can_train']}")
         
         return coverage
