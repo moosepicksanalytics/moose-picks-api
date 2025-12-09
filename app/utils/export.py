@@ -80,6 +80,11 @@ def export_predictions_to_csv(
             ml = pred["moneyline"]
             for side in ["home", "away"]:
                 if f"{side}_edge" in ml and ml[f"{side}_edge"] >= min_edge:
+                    prob = ml.get(f"{side}_win_prob", 0)
+                    edge = ml.get(f"{side}_edge", 0)
+                    # Apply display filter: don't show unrealistic predictions
+                    if prob > 0.70 or abs(edge) > 0.10:
+                        continue  # Skip unrealistic predictions
                     rows.append({
                         "game_id": game_id,
                         "league": league,
@@ -102,6 +107,11 @@ def export_predictions_to_csv(
         if "spread" in pred:
             spread = pred["spread"]
             if spread.get("edge", 0) >= min_edge:
+                prob = spread.get("cover_prob", 0)
+                edge = spread.get("edge", 0)
+                # Apply display filter: don't show unrealistic predictions
+                if prob > 0.70 or abs(edge) > 0.10:
+                    continue  # Skip unrealistic predictions
                 rows.append({
                     "game_id": game_id,
                     "league": league,
@@ -125,6 +135,11 @@ def export_predictions_to_csv(
             totals = pred["totals"]
             for side in ["over", "under"]:
                 if f"{side}_edge" in totals and totals[f"{side}_edge"] >= min_edge:
+                    prob = totals.get(f"{side}_prob", 0)
+                    edge = totals.get(f"{side}_edge", 0)
+                    # Apply display filter: don't show unrealistic predictions
+                    if prob > 0.70 or abs(edge) > 0.10:
+                        continue  # Skip unrealistic predictions
                     rows.append({
                         "game_id": game_id,
                         "league": league,

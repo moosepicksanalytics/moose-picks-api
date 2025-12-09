@@ -21,6 +21,9 @@ from app.utils.odds import (
     calculate_totals_edge,
     american_odds_to_implied_prob,
 )
+import logging
+
+logger = logging.getLogger(__name__)
 from app.utils.export import export_predictions
 from app.prediction.storage import store_predictions_for_game, get_model_version
 from app.config import settings
@@ -50,6 +53,70 @@ def load_latest_model(sport: str, market: str) -> dict:
     latest_model = max(models, key=lambda p: p.stat().st_mtime)
     
     return joblib.load(latest_model)
+
+
+def enforce_probability_constraints(ml_prob, spread_prob, total_prob, spread_line):
+    """
+    Ensure probabilities are logically consistent.
+    
+    Args:
+        ml_prob: Moneyline probability (team wins)
+        spread_prob: Spread probability (team covers spread)
+        total_prob: Total probability (over/under)
+        spread_line: The spread value (negative = favorite)
+    
+    Returns:
+        Adjusted probabilities that make logical sense
+    """
+    # Rule 1: Spread probability MUST be less than moneyline (for favorites)
+    if spread_line is not None and spread_line < 0:  # Team is favorite
+        # P(Win by spread) ≤ P(Win)
+        if spread_prob > ml_prob:
+            logger.warning(f"Adjusting spread_prob {spread_prob:.3f} to be ≤ ml_prob {ml_prob:.3f}")
+            spread_prob = min(spread_prob, ml_prob * 0.85)
+    elif spread_line is not None and spread_line > 0:  # Team is underdog
+        # Underdog covering spread includes winning outright, so spread_prob >= ml_prob
+        if spread_prob < ml_prob:
+            spread_prob = max(spread_prob, ml_prob)
+    
+    # Rule 2: Total probabilities rarely exceed 70-75%
+    if total_prob > 0.75:
+        logger.warning(f"Capping total_prob {total_prob:.3f} at 0.75")
+        total_prob = min(total_prob, 0.75)
+    
+    # Rule 3: Probabilities between 0 and 1
+    ml_prob = max(0.01, min(0.99, ml_prob))
+    spread_prob = max(0.01, min(0.99, spread_prob))
+    total_prob = max(0.01, min(0.99, total_prob))
+    
+    return ml_prob, spread_prob, total_prob
+
+
+def should_display_pick(prob, edge):
+    """
+    Filter out obviously miscalibrated or low-edge predictions.
+    
+    Args:
+        prob: Model probability
+        edge: Edge vs. market
+    
+    Returns:
+        Boolean - whether to show this pick to users
+    """
+    # Don't show if probability is unrealistically high
+    if prob > 0.70:
+        return False  # Too confident, likely miscalibrated
+    
+    # Don't show if edge claim is unrealistic
+    if abs(edge) > 0.10:
+        logger.warning(f"Filtering pick with unrealistic edge {edge:.1%} (prob: {prob:.3f})")
+        return False  # 10%+ edge is basically impossible
+    
+    # Don't show if edge is too small
+    if abs(edge) < 0.02:
+        return False  # <2% edge not worth showing
+    
+    return True
 
 
 def load_score_models(sport: str) -> dict:
@@ -182,28 +249,11 @@ def predict_for_game(
         # Ensure columns are in the same order as training
         X_aligned = X_aligned[expected_features].fillna(0)
         X_scaled = ml_scaler.transform(X_aligned)
-        home_win_prob = ml_model.predict_proba(X_scaled)[0, 1]
-        away_win_prob = 1 - home_win_prob
+        home_win_prob_raw = ml_model.predict_proba(X_scaled)[0, 1]
+        away_win_prob_raw = 1 - home_win_prob_raw
         
-        ml_edges = calculate_moneyline_edge(
-            home_win_prob,
-            away_win_prob,
-            game.home_moneyline,
-            game.away_moneyline
-        )
-        
-        predictions["moneyline"] = {
-            "home_win_prob": home_win_prob,
-            "away_win_prob": away_win_prob,
-            "home_odds": game.home_moneyline,
-            "away_odds": game.away_moneyline,
-            "home_implied_prob": american_odds_to_implied_prob(game.home_moneyline) if game.home_moneyline else 0.5,
-            "away_implied_prob": american_odds_to_implied_prob(game.away_moneyline) if game.away_moneyline else 0.5,
-            "home_edge": ml_edges["home_edge"],
-            "away_edge": ml_edges["away_edge"],
-            "best_side": ml_edges["best_side"],
-            "best_edge": ml_edges["best_edge"],
-        }
+        # Store raw probabilities (will be adjusted after all predictions)
+        predictions["_raw_ml_prob"] = home_win_prob_raw
     except Exception as e:
         print(f"Error predicting moneyline: {e}")
         predictions["moneyline"] = {}
@@ -253,20 +303,10 @@ def predict_for_game(
         # Ensure columns are in the same order as training
         X_spread_aligned = X_spread_aligned[expected_features_spread].fillna(0)
         X_spread_scaled = spread_scaler.transform(X_spread_aligned)
-        cover_prob = spread_model.predict_proba(X_spread_scaled)[0, 1]
+        cover_prob_raw = spread_model.predict_proba(X_spread_scaled)[0, 1]
         
-        # Assume -110 odds for spread
-        spread_odds = -110
-        edge = calculate_spread_edge(cover_prob, spread_odds)
-        
-        predictions["spread"] = {
-            "cover_prob": cover_prob,
-            "line": game.spread,
-            "price": spread_odds,
-            "implied_prob": american_odds_to_implied_prob(spread_odds),
-            "edge": edge,
-            "side": "favorite" if cover_prob > 0.5 else "underdog",
-        }
+        # Store raw probabilities (will be adjusted after all predictions)
+        predictions["_raw_spread_prob"] = cover_prob_raw
     except Exception as e:
         print(f"Error predicting spread: {e}")
         predictions["spread"] = {}
@@ -314,27 +354,11 @@ def predict_for_game(
         # Ensure columns are in the same order as training
         X_totals_aligned = X_totals_aligned[expected_features_totals].fillna(0)
         X_totals_scaled = totals_scaler.transform(X_totals_aligned)
-        over_prob = totals_model.predict_proba(X_totals_scaled)[0, 1]
-        under_prob = 1 - over_prob
+        over_prob_raw = totals_model.predict_proba(X_totals_scaled)[0, 1]
+        under_prob_raw = 1 - over_prob_raw
         
-        # Assume -110 odds for both sides
-        over_odds = -110
-        under_odds = -110
-        totals_edges = calculate_totals_edge(over_prob, under_prob, over_odds, under_odds)
-        
-        predictions["totals"] = {
-            "over_prob": over_prob,
-            "under_prob": under_prob,
-            "line": game.over_under,
-            "over_odds": over_odds,
-            "under_odds": under_odds,
-            "over_implied_prob": american_odds_to_implied_prob(over_odds),
-            "under_implied_prob": american_odds_to_implied_prob(under_odds),
-            "over_edge": totals_edges["over_edge"],
-            "under_edge": totals_edges["under_edge"],
-            "best_side": totals_edges["best_side"],
-            "best_edge": totals_edges["best_edge"],
-        }
+        # Store raw probabilities (will be adjusted after all predictions)
+        predictions["_raw_total_prob"] = over_prob_raw
     except Exception as e:
         print(f"Error predicting totals: {e}")
         predictions["totals"] = {}
@@ -391,6 +415,117 @@ def predict_for_game(
         print(f"Error predicting scores: {e}")
         predictions["proj_home_score"] = None
         predictions["proj_away_score"] = None
+    
+    # Apply probability constraints after all predictions are generated
+    # Collect raw probabilities
+    ml_prob = predictions.get("_raw_ml_prob")
+    spread_prob = predictions.get("_raw_spread_prob")
+    total_prob = predictions.get("_raw_total_prob")
+    
+    # Apply constraints if we have all three probabilities
+    if ml_prob is not None and spread_prob is not None and total_prob is not None:
+        spread_line = game.spread if hasattr(game, 'spread') else None
+        
+        # Apply constraints
+        ml_prob_adj, spread_prob_adj, total_prob_adj = enforce_probability_constraints(
+            ml_prob, spread_prob, total_prob, spread_line
+        )
+        
+        # Recalculate edges with adjusted probabilities
+        # Moneyline
+        away_win_prob_adj = 1 - ml_prob_adj
+        ml_edges = calculate_moneyline_edge(
+            ml_prob_adj,
+            away_win_prob_adj,
+            game.home_moneyline,
+            game.away_moneyline
+        )
+        
+        # Sanity check edges
+        if abs(ml_edges["best_edge"]) > 0.10:
+            logger.warning(f"Unrealistic moneyline edge: {ml_edges['best_edge']:.1%}")
+        
+        predictions["moneyline"] = {
+            "home_win_prob": ml_prob_adj,
+            "away_win_prob": away_win_prob_adj,
+            "home_odds": game.home_moneyline,
+            "away_odds": game.away_moneyline,
+            "home_implied_prob": american_odds_to_implied_prob(game.home_moneyline) if game.home_moneyline else 0.5,
+            "away_implied_prob": american_odds_to_implied_prob(game.away_moneyline) if game.away_moneyline else 0.5,
+            "home_edge": ml_edges["home_edge"],
+            "away_edge": ml_edges["away_edge"],
+            "best_side": ml_edges["best_side"],
+            "best_edge": ml_edges["best_edge"],
+        }
+        
+        # Spread
+        spread_odds = -110  # Default
+        spread_edge = calculate_spread_edge(spread_prob_adj, spread_odds)
+        
+        if abs(spread_edge) > 0.10:
+            logger.warning(f"Unrealistic spread edge: {spread_edge:.1%}")
+        
+        predictions["spread"] = {
+            "cover_prob": spread_prob_adj,
+            "line": game.spread,
+            "price": spread_odds,
+            "implied_prob": american_odds_to_implied_prob(spread_odds),
+            "edge": spread_edge,
+            "side": "favorite" if spread_prob_adj > 0.5 else "underdog",
+        }
+        
+        # Totals
+        under_prob_adj = 1 - total_prob_adj
+        over_odds = -110
+        under_odds = -110
+        totals_edges = calculate_totals_edge(total_prob_adj, under_prob_adj, over_odds, under_odds)
+        
+        if abs(totals_edges["best_edge"]) > 0.10:
+            logger.warning(f"Unrealistic totals edge: {totals_edges['best_edge']:.1%}")
+        
+        predictions["totals"] = {
+            "over_prob": total_prob_adj,
+            "under_prob": under_prob_adj,
+            "line": game.over_under,
+            "over_odds": over_odds,
+            "under_odds": under_odds,
+            "over_implied_prob": american_odds_to_implied_prob(over_odds),
+            "under_implied_prob": american_odds_to_implied_prob(under_odds),
+            "over_edge": totals_edges["over_edge"],
+            "under_edge": totals_edges["under_edge"],
+            "best_side": totals_edges["best_side"],
+            "best_edge": totals_edges["best_edge"],
+        }
+        
+        # Remove raw probability keys
+        predictions.pop("_raw_ml_prob", None)
+        predictions.pop("_raw_spread_prob", None)
+        predictions.pop("_raw_total_prob", None)
+    elif ml_prob is not None:
+        # If only moneyline is available, still apply basic constraints
+        ml_prob_adj = max(0.01, min(0.99, ml_prob))
+        away_win_prob_adj = 1 - ml_prob_adj
+        ml_edges = calculate_moneyline_edge(
+            ml_prob_adj,
+            away_win_prob_adj,
+            game.home_moneyline,
+            game.away_moneyline
+        )
+        if abs(ml_edges["best_edge"]) > 0.10:
+            logger.warning(f"Unrealistic moneyline edge: {ml_edges['best_edge']:.1%}")
+        predictions["moneyline"] = {
+            "home_win_prob": ml_prob_adj,
+            "away_win_prob": away_win_prob_adj,
+            "home_odds": game.home_moneyline,
+            "away_odds": game.away_moneyline,
+            "home_implied_prob": american_odds_to_implied_prob(game.home_moneyline) if game.home_moneyline else 0.5,
+            "away_implied_prob": american_odds_to_implied_prob(game.away_moneyline) if game.away_moneyline else 0.5,
+            "home_edge": ml_edges["home_edge"],
+            "away_edge": ml_edges["away_edge"],
+            "best_side": ml_edges["best_side"],
+            "best_edge": ml_edges["best_edge"],
+        }
+        predictions.pop("_raw_ml_prob", None)
     
     return predictions
 

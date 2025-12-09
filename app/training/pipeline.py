@@ -11,6 +11,7 @@ from pathlib import Path
 from datetime import datetime
 from sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor
 from sklearn.preprocessing import StandardScaler
+from sklearn.calibration import CalibratedClassifierCV
 
 # Try to import XGBoost (optional dependency)
 try:
@@ -476,10 +477,39 @@ def train_model_for_market(
         model = ModelClass(**model_params)
         model.fit(X_train_scaled, y_train)
         
+        # Calibrate the model for better probability estimates
+        # Use isotonic for larger datasets, sigmoid for smaller ones
+        calibration_method = 'isotonic' if len(X_train_scaled) > 1000 else 'sigmoid'
+        print(f"Calibrating model using {calibration_method} method...")
+        calibrated_model = CalibratedClassifierCV(
+            model,
+            method=calibration_method,
+            cv=min(5, len(X_train_scaled) // 100)  # Use fewer folds for small datasets
+        )
+        calibrated_model.fit(X_train_scaled, y_train)
+        
+        # Use calibrated model for predictions
+        model = calibrated_model
+        
         # Predictions
         y_train_pred = model.predict(X_train_scaled)
         y_val_pred = model.predict(X_val_scaled)
         y_val_pred_proba = model.predict_proba(X_val_scaled)[:, 1]
+        
+        # Log validation accuracy and check for suspiciously high accuracy (possible leakage)
+        val_acc = (y_val_pred == y_val).mean()
+        print(f"Validation Accuracy: {val_acc:.3f}")
+        
+        # Expected ranges:
+        # Moneyline: 0.50-0.58
+        # Spread: 0.48-0.53 (should be near coin flip)
+        # Total: 0.48-0.53 (should be near coin flip)
+        if market == "spread" and val_acc > 0.60:
+            print(f"⚠️  WARNING: Spread model accuracy {val_acc:.3f} > 60% - possible data leakage!")
+        elif market == "totals" and val_acc > 0.60:
+            print(f"⚠️  WARNING: Total model accuracy {val_acc:.3f} > 60% - possible data leakage!")
+        elif market == "moneyline" and val_acc > 0.65:
+            print(f"⚠️  WARNING: Moneyline model accuracy {val_acc:.3f} > 65% - investigate for leakage!")
     
     # Evaluate
     print("Evaluating model...")
