@@ -800,8 +800,8 @@ def calculate_market_specific_features(
             else:
                 home_avg_diff = pd.Series([0] * len(df))
             # REMOVED: home_cover_prob - this was data leakage (directly encoding the label)
-            # Keep spread_edge as it's useful without directly encoding the outcome
-            df["spread_edge"] = home_avg_diff - df["spread_line"]
+            # REMOVED: spread_edge - this was also data leakage (edge > 0 = cover, edge < 0 = don't cover)
+            # The model can learn: if spread_edge > 0, predict 1, else predict 0
     
     elif market == "totals":
         # Totals-specific features
@@ -813,8 +813,8 @@ def calculate_market_specific_features(
         if "over_under" in df.columns:
             df["over_under_line"] = df["over_under"].fillna(df["total_projection"])
             # REMOVED: over_prob - this was data leakage (directly encoding the label)
-            # Keep totals_edge as it's useful without directly encoding the outcome
-            df["totals_edge"] = df["total_projection"] - df["over_under_line"]
+            # REMOVED: totals_edge - this was also data leakage (edge > 0 = over, edge < 0 = under)
+            # The model can learn: if totals_edge > 0, predict 1, else predict 0
     
     elif market == "score_projection":
         # Score projection features
@@ -1059,8 +1059,8 @@ def get_feature_columns(sport: str, market: str) -> List[str]:
         "home_implied_prob",
         "away_implied_prob",
         "market_total_prob",
-        "spread_value",
-        "totals_value",
+        # REMOVED: "spread_value" - data leakage for spread market (value > 0 = cover, value < 0 = don't cover)
+        # REMOVED: "totals_value" - data leakage for totals market (value > 0 = over, value < 0 = under)
     ])
     
     # Team strength
@@ -1180,14 +1180,14 @@ def get_feature_columns(sport: str, market: str) -> List[str]:
         market_features = [
             "spread_line",
             # REMOVED: "home_cover_prob" - data leakage (directly encodes label)
-            "spread_edge",
+            # REMOVED: "spread_edge" - data leakage (edge > 0 = cover, edge < 0 = don't cover)
         ]
     elif market == "totals":
         market_features = [
             "total_projection",
             "over_under_line",
             # REMOVED: "over_prob" - data leakage (directly encodes label)
-            "totals_edge",
+            # REMOVED: "totals_edge" - data leakage (edge > 0 = over, edge < 0 = under)
         ]
     elif market == "score_projection":
         market_features = []
