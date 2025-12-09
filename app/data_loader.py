@@ -173,6 +173,40 @@ def split_by_week(
     return train_df.drop(columns=["weeks_from_start", "date_dt"]), val_df.drop(columns=["weeks_from_start", "date_dt"])
 
 
+def split_temporal(
+    df: pd.DataFrame,
+    test_size: float = 0.2
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Temporal split of data by date (no data leakage).
+    Ensures training data ends before test data starts.
+    
+    Args:
+        df: DataFrame with game data (must have 'date' column)
+        test_size: Proportion of data for validation (default 0.2 = 20%)
+    
+    Returns:
+        Tuple of (train_df, val_df) sorted by date
+    """
+    if df.empty:
+        return df, df
+    
+    df = df.copy()
+    df["date_dt"] = pd.to_datetime(df["date"])
+    df = df.sort_values("date_dt").reset_index(drop=True)
+    
+    # Calculate split index (80/20 by default)
+    split_idx = int(len(df) * (1 - test_size))
+    
+    # Ensure we split at a date boundary (no overlap)
+    split_date = df.iloc[split_idx]["date_dt"]
+    
+    train_df = df[df["date_dt"] < split_date].copy()
+    val_df = df[df["date_dt"] >= split_date].copy()
+    
+    return train_df.drop(columns=["date_dt"]), val_df.drop(columns=["date_dt"])
+
+
 def split_random(
     df: pd.DataFrame,
     test_size: float = 0.2,
@@ -180,6 +214,7 @@ def split_random(
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Random split of data.
+    WARNING: This can cause data leakage. Use split_temporal() for production.
     
     Args:
         df: DataFrame with game data

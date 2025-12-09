@@ -150,8 +150,6 @@ def predict_for_game(
     if not available_cols:
         return {"error": "No features available"}
     
-    X = df[available_cols].fillna(0)
-    
     predictions = {
         "game_id": game.id,
         "league": game.league or sport,
@@ -167,7 +165,21 @@ def predict_for_game(
         ml_model = ml_model_data["model"]
         ml_scaler = ml_model_data["scaler"]
         
-        X_scaled = ml_scaler.transform(X)
+        # Get expected features from saved model data (stored during training)
+        expected_features = ml_model_data.get("feature_columns", feature_cols)
+        
+        # Create feature vector with expected features in correct order
+        X_aligned = pd.DataFrame(index=[0])
+        for feat in expected_features:
+            if feat in df.columns:
+                X_aligned[feat] = df[feat].iloc[0] if len(df) > 0 else 0
+            else:
+                # Fill missing features with 0 (model was trained without this feature)
+                X_aligned[feat] = 0
+        
+        # Ensure columns are in the same order as training
+        X_aligned = X_aligned[expected_features].fillna(0)
+        X_scaled = ml_scaler.transform(X_aligned)
         home_win_prob = ml_model.predict_proba(X_scaled)[0, 1]
         away_win_prob = 1 - home_win_prob
         
@@ -222,10 +234,21 @@ def predict_for_game(
                 include_h2h=include_h2h
             )
         feature_cols_spread = get_feature_columns(sport, "spread")
-        available_cols_spread = [col for col in feature_cols_spread if col in df_spread.columns]
-        X_spread = df_spread[available_cols_spread].fillna(0)
         
-        X_spread_scaled = spread_scaler.transform(X_spread)
+        # Get expected features from saved model data
+        expected_features_spread = spread_model_data.get("feature_columns", feature_cols_spread)
+        
+        # Create aligned feature vector in correct order
+        X_spread_aligned = pd.DataFrame(index=[0])
+        for feat in expected_features_spread:
+            if feat in df_spread.columns:
+                X_spread_aligned[feat] = df_spread[feat].iloc[0] if len(df_spread) > 0 else 0
+            else:
+                X_spread_aligned[feat] = 0
+        
+        # Ensure columns are in the same order as training
+        X_spread_aligned = X_spread_aligned[expected_features_spread].fillna(0)
+        X_spread_scaled = spread_scaler.transform(X_spread_aligned)
         cover_prob = spread_model.predict_proba(X_spread_scaled)[0, 1]
         
         # Assume -110 odds for spread
@@ -272,10 +295,21 @@ def predict_for_game(
                 include_h2h=include_h2h
             )
         feature_cols_totals = get_feature_columns(sport, "totals")
-        available_cols_totals = [col for col in feature_cols_totals if col in df_totals.columns]
-        X_totals = df_totals[available_cols_totals].fillna(0)
         
-        X_totals_scaled = totals_scaler.transform(X_totals)
+        # Get expected features from saved model data
+        expected_features_totals = totals_model_data.get("feature_columns", feature_cols_totals)
+        
+        # Create aligned feature vector in correct order
+        X_totals_aligned = pd.DataFrame(index=[0])
+        for feat in expected_features_totals:
+            if feat in df_totals.columns:
+                X_totals_aligned[feat] = df_totals[feat].iloc[0] if len(df_totals) > 0 else 0
+            else:
+                X_totals_aligned[feat] = 0
+        
+        # Ensure columns are in the same order as training
+        X_totals_aligned = X_totals_aligned[expected_features_totals].fillna(0)
+        X_totals_scaled = totals_scaler.transform(X_totals_aligned)
         over_prob = totals_model.predict_proba(X_totals_scaled)[0, 1]
         under_prob = 1 - over_prob
         
@@ -307,16 +341,39 @@ def predict_for_game(
         
         # Use moneyline features for score projection
         feature_cols_score = get_feature_columns(sport, "score_projection")
-        available_cols_score = [col for col in feature_cols_score if col in df.columns]
-        X_score = df[available_cols_score].fillna(0)
         
-        home_model = score_models["home"]["model"]
-        home_scaler = score_models["home"]["scaler"]
-        away_model = score_models["away"]["model"]
-        away_scaler = score_models["away"]["scaler"]
+        home_model_data = score_models["home"]
+        home_model = home_model_data["model"]
+        home_scaler = home_model_data["scaler"]
+        away_model_data = score_models["away"]
+        away_model = away_model_data["model"]
+        away_scaler = away_model_data["scaler"]
         
-        X_home_scaled = home_scaler.transform(X_score)
-        X_away_scaled = away_scaler.transform(X_score)
+        # Get expected features from saved model data
+        expected_features_home = home_model_data.get("feature_columns", feature_cols_score)
+        expected_features_away = away_model_data.get("feature_columns", feature_cols_score)
+        
+        # Create aligned feature vectors in correct order
+        X_home_aligned = pd.DataFrame(index=[0])
+        for feat in expected_features_home:
+            if feat in df.columns:
+                X_home_aligned[feat] = df[feat].iloc[0] if len(df) > 0 else 0
+            else:
+                X_home_aligned[feat] = 0
+        
+        X_away_aligned = pd.DataFrame(index=[0])
+        for feat in expected_features_away:
+            if feat in df.columns:
+                X_away_aligned[feat] = df[feat].iloc[0] if len(df) > 0 else 0
+            else:
+                X_away_aligned[feat] = 0
+        
+        # Ensure columns are in the same order as training
+        X_home_aligned = X_home_aligned[expected_features_home].fillna(0)
+        X_away_aligned = X_away_aligned[expected_features_away].fillna(0)
+        
+        X_home_scaled = home_scaler.transform(X_home_aligned)
+        X_away_scaled = away_scaler.transform(X_away_aligned)
         
         proj_home_score = home_model.predict(X_home_scaled)[0]
         proj_away_score = away_model.predict(X_away_scaled)[0]

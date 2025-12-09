@@ -3,11 +3,14 @@ Feature engineering for NFL, NHL, NBA, and MLB game predictions.
 Builds comprehensive features including rolling stats, rest days, home/away splits, 
 head-to-head records, ATS records, betting market features, and advanced metrics.
 Supports all four major sports with sport-specific optimizations.
+
+Now uses sport-specific feature engineers for advanced features.
 """
 import pandas as pd
 import numpy as np
 from typing import List, Dict
 from datetime import timedelta
+from app.training.sport_feature_engineers import get_feature_engineer
 
 
 def calculate_rest_days(df: pd.DataFrame) -> pd.DataFrame:
@@ -827,10 +830,13 @@ def build_features(
     market: str,
     rolling_window: int = 10,
     include_rest_days: bool = True,
-    include_h2h: bool = True
+    include_h2h: bool = True,
+    use_sport_specific: bool = True
 ) -> pd.DataFrame:
     """
     Build comprehensive features for game predictions.
+    
+    Now uses sport-specific feature engineers for advanced features.
     
     Args:
         df: DataFrame with game data
@@ -839,6 +845,7 @@ def build_features(
         rolling_window: Number of recent games for rolling stats
         include_rest_days: Whether to include rest days feature
         include_h2h: Whether to include head-to-head features
+        use_sport_specific: Whether to use sport-specific feature engineers
     
     Returns:
         DataFrame with features added
@@ -846,6 +853,49 @@ def build_features(
     if df.empty:
         return df
     
+    # Use sport-specific feature engineer if available
+    if use_sport_specific:
+        try:
+            engineer = get_feature_engineer(sport)
+            engineer.rolling_windows = [3, 5, 10, 15]
+            engineer.include_rest_days = include_rest_days
+            engineer.include_h2h = include_h2h
+            
+            # Build features using sport-specific engineer
+            df = engineer.build_features(df, sport, market)
+            
+            # Add standard features that aren't in base class
+            print("Calculating ATS records...")
+            df = calculate_ats_records(df, rolling_window)
+            
+            print("Calculating Over/Under records...")
+            df = calculate_totals_records(df, rolling_window)
+            
+            print("Calculating recent outcomes...")
+            df = calculate_recent_outcomes(df, windows=[3, 5])
+            
+            print("Calculating opponent-adjusted statistics...")
+            df = calculate_opponent_adjusted_stats(df, rolling_window)
+            
+            print("Calculating team strength metrics...")
+            df = calculate_team_strength(df)
+            
+            print("Calculating betting market features...")
+            df = calculate_betting_market_features(df)
+            
+            print(f"Calculating {market}-specific features...")
+            df = calculate_market_specific_features(df, sport, market)
+            
+            # Fill remaining NaN values
+            numeric_cols = df.select_dtypes(include=[np.number]).columns
+            df[numeric_cols] = df[numeric_cols].fillna(0)
+            
+            return df
+        except Exception as e:
+            print(f"Warning: Sport-specific feature engineer failed ({e}), falling back to standard features")
+            # Fall through to standard implementation
+    
+    # Standard feature building (fallback)
     df = df.copy()
     
     # Ensure date is datetime
@@ -918,6 +968,7 @@ def build_features(
 def get_feature_columns(sport: str, market: str) -> List[str]:
     """
     Get list of feature column names for a sport and market.
+    Includes sport-specific features.
     
     Args:
         sport: Sport code (NFL, NHL, NBA, MLB)
@@ -1017,6 +1068,110 @@ def get_feature_columns(sport: str, market: str) -> List[str]:
         "strength_diff",
         "win_rate_diff",
     ])
+    
+    # Sport-specific features
+    sport_upper = sport.upper()
+    if sport_upper == "NFL":
+        base_features.extend([
+            "division_matchup",
+            "home_third_down_pct",
+            "away_third_down_pct",
+            "home_redzone_efficiency",
+            "away_redzone_efficiency",
+            "turnover_differential",
+            "home_time_of_possession",
+            "away_time_of_possession",
+        ])
+        for window in [3, 5, 10, 15]:
+            for prefix in ["home", "away"]:
+                base_features.extend([
+                    f"{prefix}_third_down_pct_{window}",
+                    f"{prefix}_redzone_efficiency_{window}",
+                    f"{prefix}_turnover_differential_{window}",
+                    f"{prefix}_time_of_possession_{window}",
+                ])
+    elif sport_upper == "NHL":
+        base_features.extend([
+            "home_goalie_save_pct",
+            "away_goalie_save_pct",
+            "home_goalie_gaa",
+            "away_goalie_gaa",
+            "home_corsi",
+            "away_corsi",
+            "home_powerplay_pct",
+            "away_powerplay_pct",
+            "home_penaltykill_pct",
+            "away_penaltykill_pct",
+            "home_goalie_back_to_back",
+            "away_goalie_back_to_back",
+        ])
+        for window in [3, 5, 10, 15]:
+            for prefix in ["home", "away"]:
+                base_features.extend([
+                    f"{prefix}_goalie_save_pct_{window}",
+                    f"{prefix}_goalie_gaa_{window}",
+                    f"{prefix}_corsi_{window}",
+                    f"{prefix}_powerplay_pct_{window}",
+                    f"{prefix}_penaltykill_pct_{window}",
+                ])
+    elif sport_upper == "NBA":
+        base_features.extend([
+            "home_pace",
+            "away_pace",
+            "home_efg_pct",
+            "away_efg_pct",
+            "home_true_shooting_pct",
+            "away_true_shooting_pct",
+            "home_off_reb_pct",
+            "away_off_reb_pct",
+            "home_def_reb_pct",
+            "away_def_reb_pct",
+            "home_assists_per_game",
+            "away_assists_per_game",
+            "home_turnovers_per_game",
+            "away_turnovers_per_game",
+            "home_3p_pct",
+            "away_3p_pct",
+            "conference_matchup",
+        ])
+        for window in [3, 5, 10, 15]:
+            for prefix in ["home", "away"]:
+                base_features.extend([
+                    f"{prefix}_pace_{window}",
+                    f"{prefix}_efg_pct_{window}",
+                    f"{prefix}_true_shooting_pct_{window}",
+                    f"{prefix}_off_reb_pct_{window}",
+                    f"{prefix}_def_reb_pct_{window}",
+                    f"{prefix}_assists_per_game_{window}",
+                    f"{prefix}_turnovers_per_game_{window}",
+                    f"{prefix}_3p_pct_{window}",
+                ])
+    elif sport_upper == "MLB":
+        base_features.extend([
+            "home_pitcher_era",
+            "away_pitcher_era",
+            "home_pitcher_whip",
+            "away_pitcher_whip",
+            "home_pitcher_k9",
+            "away_pitcher_k9",
+            "home_pitcher_rest_days",
+            "away_pitcher_rest_days",
+            "day_game",
+            "home_ops",
+            "away_ops",
+            "home_hr_rate",
+            "away_hr_rate",
+            "ballpark_factor",
+        ])
+        for window in [3, 5, 10, 15]:
+            for prefix in ["home", "away"]:
+                base_features.extend([
+                    f"{prefix}_pitcher_era_{window}",
+                    f"{prefix}_pitcher_whip_{window}",
+                    f"{prefix}_pitcher_k9_{window}",
+                    f"{prefix}_ops_{window}",
+                    f"{prefix}_hr_rate_{window}",
+                ])
     
     # Market-specific features
     if market == "spread":

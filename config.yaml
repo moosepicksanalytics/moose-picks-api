@@ -47,6 +47,7 @@ features:
   include_rest_days: true
   include_home_away_splits: true
   include_head_to_head: true
+  use_sport_specific: true  # Use sport-specific feature engineers (NFL, NHL, NBA, MLB)
 
 # Export settings
 export:
