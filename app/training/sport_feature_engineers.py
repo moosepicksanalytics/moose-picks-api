@@ -202,14 +202,11 @@ class NHLFeatureEngineer(BaseFeatureEngineer):
                 df.at[idx, "home_goalie_gaa"] = home_goals_against
                 df.at[idx, "away_goalie_gaa"] = away_goals_against
                 
-                # Estimate Corsi (shot differential)
-                # Winning team typically has more shots
-                if home_score > away_score:
-                    df.at[idx, "home_corsi"] = 0.55
-                    df.at[idx, "away_corsi"] = 0.45
-                else:
-                    df.at[idx, "home_corsi"] = 0.45
-                    df.at[idx, "away_corsi"] = 0.55
+                # REMOVED: Corsi estimation using current game outcome
+                # This was data leakage - using home_score > away_score directly encodes the target
+                # Corsi should be calculated from past games only, not the current game
+                # For now, keep default values (0.5) - in future, calculate from historical shot data
+                pass  # Keep default 0.5 values set above
         
         # Calculate rolling NHL-specific stats
         for window in self.rolling_windows:

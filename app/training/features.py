@@ -1111,8 +1111,10 @@ def get_feature_columns(sport: str, market: str) -> List[str]:
             "away_goalie_save_pct",
             "home_goalie_gaa",
             "away_goalie_gaa",
-            "home_corsi",
-            "away_corsi",
+            # REMOVED: home_corsi, away_corsi - was causing data leakage
+            # Corsi was being calculated from current game outcome (home_score > away_score)
+            # which directly encodes the target variable. Until we can calculate Corsi from
+            # historical shot data only, we'll exclude it.
             "home_powerplay_pct",
             "away_powerplay_pct",
             "home_penaltykill_pct",
@@ -1125,7 +1127,7 @@ def get_feature_columns(sport: str, market: str) -> List[str]:
                 base_features.extend([
                     f"{prefix}_goalie_save_pct_{window}",
                     f"{prefix}_goalie_gaa_{window}",
-                    f"{prefix}_corsi_{window}",
+                    # REMOVED: f"{prefix}_corsi_{window}" - data leakage
                     f"{prefix}_powerplay_pct_{window}",
                     f"{prefix}_penaltykill_pct_{window}",
                 ])

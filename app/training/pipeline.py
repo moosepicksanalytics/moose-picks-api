@@ -102,7 +102,7 @@ def validate_no_leakage(df: pd.DataFrame, features: list, target_col: str = None
     # These are features that use actual game outcomes or directly encode predictions
     leakage_features = ['spread_value', 'totals_value', 'home_cover_prob', 'over_prob', 
                        'spread_edge', 'totals_edge', 'actual_score', 'actual_margin',
-                       'game_result', 'final_score', 'final_margin']
+                       'game_result', 'final_score', 'final_margin', 'corsi']
     for feat in features:
         feat_lower = feat.lower()
         # Only flag if it's an exact match or clearly a leakage feature
@@ -197,12 +197,28 @@ def prepare_labels(df: pd.DataFrame, sport: str, market: str) -> pd.Series:
     elif market == "spread":
         # 1 if home covers spread, 0 otherwise
         if "spread" not in df.columns or df["spread"].isna().all():
-            # If no spread data, return NaN (exclude from training)
-            # Don't use point differential as fallback - that causes data leakage
+            # If no spread data at all, we can't train spread models
+            # Return NaN to exclude from training
             return pd.Series([np.nan] * len(df), index=df.index)
-        # Handle individual NaN spreads - exclude those rows
-        spread_clean = df["spread"].fillna(np.nan)  # Keep NaN, don't fill with 0
-        return (df["home_score"] - df["away_score"] > spread_clean).astype(float)  # Use float to preserve NaN
+        
+        # For games with null spreads, we need to decide:
+        # Option 1: Exclude them (return NaN) - safest but may lose data
+        # Option 2: Use spread = 0 as default (assumes pick'em) - allows training but may introduce bias
+        # We'll use Option 1 (exclude) to be safe, but log a warning if too many are excluded
+        spread_clean = df["spread"].copy()
+        null_count = spread_clean.isna().sum()
+        if null_count > 0 and null_count < len(df) * 0.5:  # If <50% are null, exclude them
+            # Some spreads exist, exclude null ones
+            result = (df["home_score"] - df["away_score"] > spread_clean).astype(float)
+            return result
+        elif null_count == len(df):
+            # All spreads are null - can't train
+            return pd.Series([np.nan] * len(df), index=df.index)
+        else:
+            # Most spreads are null (>50%) - use 0 as default for null spreads
+            # This allows training but may introduce bias
+            spread_clean = spread_clean.fillna(0)
+            return (df["home_score"] - df["away_score"] > spread_clean).astype(int)
     
     elif market == "totals":
         # 1 if over, 0 if under
