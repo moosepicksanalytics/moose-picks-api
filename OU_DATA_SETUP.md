@@ -55,6 +55,18 @@ Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/ba
 
 **Note:** Backfill runs in the background. Check Railway logs to monitor progress.
 
+**Important:** The backfill can only set `ou_result` for games that have `over_under` values. If your games have scores but no `over_under` values, you need to backfill odds first:
+
+```powershell
+# First, backfill odds to get over_under values
+Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/backfill-odds?sport=NFL&start_date=2021-09-01&end_date=2024-12-31" -Method POST
+
+# Then, backfill O/U data to calculate ou_result
+Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/backfill-ou-data?sport=NFL" -Method POST
+```
+
+Games without `over_under` will get `actual_total` calculated but NOT `ou_result` (can't determine OVER/UNDER without the line).
+
 ### 3. Verify Coverage
 
 Check if you have enough O/U data for training:
@@ -156,9 +168,30 @@ The system handles:
 **Cause**: Missing `closing_total` or `ou_result` data
 
 **Solutions**:
-1. Run backfill: `Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/backfill-ou-data?sport=<SPORT>" -Method POST`
-2. Check if ESPN is providing `overUnder` in odds data
-3. Verify database migration ran successfully: `Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/migrate-ou-columns" -Method POST`
+1. **Check if games have `over_under` values**: Games need `over_under` to calculate `ou_result`. If your games have scores but no `over_under`, backfill odds first:
+   ```powershell
+   # Backfill odds to get over_under values
+   Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/backfill-odds?sport=<SPORT>&start_date=2021-01-01&end_date=2024-12-31" -Method POST
+   ```
+2. **Then run O/U backfill**: `Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/backfill-ou-data?sport=<SPORT>" -Method POST`
+3. Check if ESPN is providing `overUnder` in odds data
+4. Verify database migration ran successfully: `Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/migrate-ou-columns" -Method POST`
+
+### Backfill Not Updating Old Records
+
+**Cause**: Games may not have `over_under` values, so they can't get `ou_result` set
+
+**What the backfill does**:
+- ✅ Sets `actual_total` for ALL games with scores (even without `over_under`)
+- ✅ Sets `closing_total` from `over_under` (if `over_under` exists)
+- ✅ Sets `ou_result` ONLY if both `actual_total` and `closing_total` exist
+
+**If games have scores but no `over_under`**:
+1. They will get `actual_total` set ✅
+2. They will NOT get `ou_result` set ❌ (can't determine OVER/UNDER without the line)
+3. They won't count toward coverage (validation only counts games with `ou_result`)
+
+**Solution**: Backfill odds first to populate `over_under` values, then run O/U backfill again.
 
 ### Low Coverage Percentage
 

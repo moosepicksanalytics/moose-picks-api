@@ -14,7 +14,7 @@ from app.database import SessionLocal
 from app.models.db_models import Game
 from app.utils.ou_calculator import OUCalculator
 from datetime import datetime, timedelta
-from sqlalchemy import func
+from sqlalchemy import func, or_
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -40,26 +40,36 @@ def backfill_ou_for_sport(sport: str, start_date: datetime = None, end_date: dat
         
         logger.info(f"Backfilling {sport} O/U data from {start_date.date()} to {end_date.date()}")
         
-        # Find all final games with scores but missing O/U data
+        # Find all final games with scores (use case-insensitive status matching)
         games = db.query(Game).filter(
             Game.sport == sport,
-            Game.status == "final",
+            or_(
+                Game.status.ilike("%final%"),
+                Game.status == "final",
+                Game.status == "STATUS_FINAL"
+            ),
             Game.home_score.isnot(None),
             Game.away_score.isnot(None),
             Game.date >= start_date,
             Game.date <= end_date
-        ).all()
+        ).order_by(Game.date).all()
         
         total_games = len(games)
         updated_count = 0
         skipped_count = 0
+        no_over_under_count = 0
+        games_with_over_under = 0
+        
+        logger.info(f"  Found {total_games} final games with scores to process")
         
         for game in games:
             try:
-                # Skip if already has complete O/U data
-                if game.actual_total is not None and game.ou_result is not None:
-                    skipped_count += 1
-                    continue
+                # Track if game has over_under value
+                has_over_under = game.over_under is not None
+                if has_over_under:
+                    games_with_over_under += 1
+                else:
+                    no_over_under_count += 1
                 
                 # Calculate O/U data from existing scores and over_under
                 ou_data = OUCalculator.process_game_from_scores(
@@ -68,15 +78,41 @@ def backfill_ou_for_sport(sport: str, start_date: datetime = None, end_date: dat
                     over_under=game.over_under
                 )
                 
-                # Update game with O/U data
-                if ou_data['closing_total'] is not None:
-                    game.closing_total = ou_data['closing_total']
+                # Track if we're actually updating anything
+                needs_update = False
+                updates_made = []
+                
+                # Always update actual_total if we can calculate it (even if over_under is missing)
                 if ou_data['actual_total'] is not None:
-                    game.actual_total = ou_data['actual_total']
+                    if game.actual_total != ou_data['actual_total']:
+                        game.actual_total = ou_data['actual_total']
+                        needs_update = True
+                        updates_made.append("actual_total")
+                
+                # Update closing_total if we have it (from over_under)
+                if ou_data['closing_total'] is not None:
+                    if game.closing_total != ou_data['closing_total']:
+                        game.closing_total = ou_data['closing_total']
+                        needs_update = True
+                        updates_made.append("closing_total")
+                
+                # Update ou_result if we can calculate it (requires both actual_total and closing_total)
                 if ou_data['ou_result'] is not None:
-                    game.ou_result = ou_data['ou_result']
+                    if game.ou_result != ou_data['ou_result']:
+                        game.ou_result = ou_data['ou_result']
+                        needs_update = True
+                        updates_made.append("ou_result")
+                
+                # Only skip if we didn't need to update anything
+                if not needs_update:
+                    skipped_count += 1
+                    continue
                 
                 updated_count += 1
+                
+                # Log first few updates for debugging
+                if updated_count <= 5:
+                    logger.debug(f"  Updated game {game.id}: {', '.join(updates_made)}")
                 
                 if updated_count % 100 == 0:
                     db.commit()
@@ -88,8 +124,16 @@ def backfill_ou_for_sport(sport: str, start_date: datetime = None, end_date: dat
         
         db.commit()
         logger.info(f"✓ Updated {updated_count} {sport} games with O/U data")
-        logger.info(f"  Skipped {skipped_count} games (already had O/U data)")
+        logger.info(f"  Skipped {skipped_count} games (already had complete O/U data)")
+        logger.info(f"  Games with over_under: {games_with_over_under} (can get ou_result)")
+        logger.info(f"  Games without over_under: {no_over_under_count} (got actual_total but NOT ou_result - need odds backfill)")
         logger.info(f"  Total processed: {total_games}")
+        
+        if no_over_under_count > 0:
+            logger.warning(f"  ⚠️  {no_over_under_count} games don't have over_under values!")
+            logger.warning(f"  To get ou_result for these games, backfill odds first:")
+            logger.warning(f"  POST /api/backfill-odds?sport={sport}&start_date={start_date.date()}&end_date={end_date.date()}")
+            logger.warning(f"  Then run this O/U backfill again to calculate ou_result.")
         
         return updated_count
         
