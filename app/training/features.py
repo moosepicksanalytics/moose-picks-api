@@ -978,14 +978,18 @@ def get_feature_columns(sport: str, market: str) -> List[str]:
     # Multi-window rolling statistics
     for window in [3, 5, 10, 15]:
         for prefix in ["home", "away"]:
-            base_features.extend([
+            features_to_add = [
                 f"{prefix}_win_rate_{window}",
                 f"{prefix}_points_for_avg_{window}",
                 f"{prefix}_points_against_avg_{window}",
-                f"{prefix}_point_diff_avg_{window}",
                 f"{prefix}_offensive_efficiency_{window}",
                 f"{prefix}_defensive_efficiency_{window}",
-            ])
+            ]
+            # REMOVED for spread market: point_diff_avg allows model to reconstruct edge
+            # (if home_point_diff_avg > spread_threshold, predict cover)
+            if market != "spread":
+                features_to_add.append(f"{prefix}_point_diff_avg_{window}")
+            base_features.extend(features_to_add)
             if window >= 4:
                 base_features.append(f"{prefix}_momentum_{window}")
     
@@ -1035,12 +1039,15 @@ def get_feature_columns(sport: str, market: str) -> List[str]:
     ])
     
     # Head-to-head
-    base_features.extend([
+    h2h_features = [
         "h2h_home_wins",
         "h2h_total_games",
         "h2h_home_win_rate",
-        "h2h_avg_margin",
-    ])
+    ]
+    # REMOVED for spread market: h2h_avg_margin allows model to reconstruct edge
+    if market != "spread":
+        h2h_features.append("h2h_avg_margin")
+    base_features.extend(h2h_features)
     
     # Opponent-adjusted
     base_features.extend([
