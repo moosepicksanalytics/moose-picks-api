@@ -148,23 +148,42 @@ def validate_ou_coverage(sport: str, min_games: int = 100):
             Game.ou_result.isnot(None)
         ).scalar()
         
-        # Get distribution
-        distribution = db.query(
+        # Get distribution - also check for empty strings
+        distribution_query = db.query(
             Game.ou_result,
             func.count(Game.id).label('count')
         ).filter(
             Game.sport == sport,
             Game.status == "final",
-            Game.ou_result.isnot(None)
+            Game.ou_result.isnot(None),
+            Game.ou_result != ''  # Exclude empty strings
         ).group_by(Game.ou_result).all()
+        
+        # Build distribution dictionary, ensuring all values are properly converted
+        distribution = {}
+        for row in distribution_query:
+            ou_result = row[0]
+            count = int(row[1]) if row[1] is not None else 0
+            if ou_result and str(ou_result).strip():  # Ensure not None and not empty
+                distribution[str(ou_result).strip()] = count
+        
+        # Debug: Log if we have games with O/U data but no distribution
+        if games_with_ou > 0 and len(distribution) == 0:
+            # Check what ou_result values actually exist
+            sample_results = db.query(Game.ou_result).filter(
+                Game.sport == sport,
+                Game.status == "final",
+                Game.ou_result.isnot(None)
+            ).limit(5).all()
+            logger.warning(f"  ⚠️  Warning: {games_with_ou} games have ou_result but distribution is empty. Sample values: {[r[0] for r in sample_results]}")
         
         coverage = {
             'sport': sport,
-            'total_completed': total_games,
-            'with_ou_data': games_with_ou,
-            'coverage_pct': (games_with_ou / total_games * 100) if total_games > 0 else 0,
-            'distribution': {row[0]: row[1] for row in distribution},
-            'can_train': games_with_ou >= min_games
+            'total_completed': int(total_games) if total_games else 0,
+            'with_ou_data': int(games_with_ou) if games_with_ou else 0,
+            'coverage_pct': round((games_with_ou / total_games * 100) if total_games > 0 else 0, 2),
+            'distribution': distribution,
+            'can_train': games_with_ou >= min_games if games_with_ou else False
         }
         
         logger.info(f"O/U Coverage {sport}: {coverage['coverage_pct']:.1f}% ({games_with_ou}/{total_games})")

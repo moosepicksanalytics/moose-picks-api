@@ -281,25 +281,61 @@ def get_ou_coverage(sport: Optional[str] = None):
     import sys
     from pathlib import Path
     import logging
+    import io
+    from contextlib import redirect_stdout, redirect_stderr
+    
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from scripts.backfill_ou_data import validate_ou_coverage
     
     # Suppress logging output for API response
-    logging.getLogger().setLevel(logging.ERROR)
+    log_capture = io.StringIO()
     
-    if sport:
-        coverage = validate_ou_coverage(sport.upper())
-        return {
-            "sport": sport.upper(),
-            "coverage": coverage
-        }
-    else:
-        results = {}
-        for s in ["NFL", "NHL", "NBA", "MLB"]:
-            results[s] = validate_ou_coverage(s)
-        return {
-            "all_sports": results
-        }
+    try:
+        if sport:
+            # Redirect stdout/stderr to capture and suppress logs
+            with redirect_stdout(log_capture), redirect_stderr(log_capture):
+                coverage = validate_ou_coverage(sport.upper())
+            
+            # Ensure distribution is a proper dict (not None)
+            distribution = coverage.get("distribution", {}) or {}
+            
+            return {
+                "sport": sport.upper(),
+                "coverage": {
+                    "sport": coverage.get("sport", sport.upper()),
+                    "total_completed": int(coverage.get("total_completed", 0)),
+                    "with_ou_data": int(coverage.get("with_ou_data", 0)),
+                    "coverage_pct": float(coverage.get("coverage_pct", 0)),
+                    "distribution": distribution,
+                    "can_train": bool(coverage.get("can_train", False))
+                }
+            }
+        else:
+            results = {}
+            for s in ["NFL", "NHL", "NBA", "MLB"]:
+                with redirect_stdout(log_capture), redirect_stderr(log_capture):
+                    coverage = validate_ou_coverage(s)
+                
+                # Ensure distribution is a proper dict (not None)
+                distribution = coverage.get("distribution", {}) or {}
+                
+                results[s] = {
+                    "sport": coverage.get("sport", s),
+                    "total_completed": int(coverage.get("total_completed", 0)),
+                    "with_ou_data": int(coverage.get("with_ou_data", 0)),
+                    "coverage_pct": float(coverage.get("coverage_pct", 0)),
+                    "distribution": distribution,
+                    "can_train": bool(coverage.get("can_train", False))
+                }
+            return {
+                "all_sports": results
+            }
+    except Exception as e:
+        import traceback
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error validating O/U coverage: {str(e)}\n{traceback.format_exc()}"
+        )
 
 
 @router.post("/trigger-daily-workflow")

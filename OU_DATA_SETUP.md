@@ -67,17 +67,37 @@ Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/va
 Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/validate-ou-coverage?sport=NFL" -Method GET
 ```
 
-Expected output:
+Expected output (JSON):
+```json
+{
+  "sport": "NFL",
+  "coverage": {
+    "sport": "NFL",
+    "total_completed": 1447,
+    "with_ou_data": 1234,
+    "coverage_pct": 85.2,
+    "distribution": {
+      "OVER": 612,
+      "UNDER": 589,
+      "PUSH": 33
+    },
+    "can_train": true
+  }
+}
 ```
-O/U Coverage NFL: 85.2% (1234/1447)
-  Distribution: {'OVER': 612, 'UNDER': 589, 'PUSH': 33}
-  Can train: True
-```
+
+**Note:** If you see low coverage (e.g., 2-5%), you need to run the backfill first. The distribution will be empty until games have been processed with O/U data.
 
 **Minimum requirements:**
 - At least 200 games with O/U data per sport
 - Balanced distribution (not all OVER or all UNDER)
 - Less than 5% pushes (normal)
+
+**Current Status:** Based on your API response, you have:
+- NFL: 30 games with O/U data (2.22% coverage) - **Need to backfill**
+- Distribution is empty because most games haven't been processed yet
+
+**Next Step:** Run the backfill to populate O/U data for historical games.
 
 ### 4. Retrain Totals Models
 
