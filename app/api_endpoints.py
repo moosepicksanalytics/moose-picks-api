@@ -581,7 +581,6 @@ def get_latest_predictions(sport: str = "NFL", limit: int = 10):
             if pred.market == "moneyline":
                 home_prob = safe_float(pred.home_win_prob)
                 away_prob = 1 - home_prob if home_prob is not None else None
-                pick["side"] = "home" if home_prob and home_prob > 0.5 else "away"
                 pick["home_win_prob"] = home_prob
                 
                 # Calculate actual edge using odds
@@ -591,11 +590,21 @@ def get_latest_predictions(sport: str = "NFL", limit: int = 10):
                         safe_float(game.home_moneyline),
                         safe_float(game.away_moneyline)
                     )
-                    if pick["side"] == "home":
-                        pick["edge"] = ml_edges["home_edge"] if ml_edges["home_edge"] else 0.0
+                    # Use best_side from edge calculation (which side has positive edge)
+                    # This ensures we recommend the side with value, not just the favorite
+                    if ml_edges["best_side"] and ml_edges["best_edge"] > 0:
+                        pick["side"] = ml_edges["best_side"]
+                        pick["edge"] = ml_edges["best_edge"]
                     else:
-                        pick["edge"] = ml_edges["away_edge"] if ml_edges["away_edge"] else 0.0
+                        # No positive edge, use probability-based side
+                        pick["side"] = "home" if home_prob and home_prob > 0.5 else "away"
+                        if pick["side"] == "home":
+                            pick["edge"] = ml_edges["home_edge"] if ml_edges["home_edge"] else 0.0
+                        else:
+                            pick["edge"] = ml_edges["away_edge"] if ml_edges["away_edge"] else 0.0
                 else:
+                    # No odds available, use probability-based side
+                    pick["side"] = "home" if home_prob and home_prob > 0.5 else "away"
                     pick["edge"] = 0.0
             elif pred.market == "spread":
                 spread_prob = safe_float(pred.spread_cover_prob)
@@ -860,7 +869,6 @@ def get_predictions_by_date_range(
             if pred.market == "moneyline":
                 home_prob = safe_float(pred.home_win_prob)
                 away_prob = 1 - home_prob if home_prob is not None else None
-                pick["side"] = "home" if home_prob and home_prob > 0.5 else "away"
                 pick["home_win_prob"] = home_prob
                 
                 # Calculate actual edge using odds
@@ -870,11 +878,21 @@ def get_predictions_by_date_range(
                         safe_float(game.home_moneyline),
                         safe_float(game.away_moneyline)
                     )
-                    if pick["side"] == "home":
-                        pick["edge"] = ml_edges["home_edge"] if ml_edges["home_edge"] else 0.0
+                    # Use best_side from edge calculation (which side has positive edge)
+                    # This ensures we recommend the side with value, not just the favorite
+                    if ml_edges["best_side"] and ml_edges["best_edge"] > 0:
+                        pick["side"] = ml_edges["best_side"]
+                        pick["edge"] = ml_edges["best_edge"]
                     else:
-                        pick["edge"] = ml_edges["away_edge"] if ml_edges["away_edge"] else 0.0
+                        # No positive edge, use probability-based side
+                        pick["side"] = "home" if home_prob and home_prob > 0.5 else "away"
+                        if pick["side"] == "home":
+                            pick["edge"] = ml_edges["home_edge"] if ml_edges["home_edge"] else 0.0
+                        else:
+                            pick["edge"] = ml_edges["away_edge"] if ml_edges["away_edge"] else 0.0
                 else:
+                    # No odds available, use probability-based side
+                    pick["side"] = "home" if home_prob and home_prob > 0.5 else "away"
                     pick["edge"] = 0.0
             elif pred.market == "spread":
                 spread_prob = safe_float(pred.spread_cover_prob)

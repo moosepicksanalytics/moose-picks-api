@@ -232,15 +232,52 @@ def parse_odds_data(odds_data: List[Dict], sport: str) -> List[Dict]:
             "bookmaker": bookmaker.get("title", "unknown"),
         }
         
-        # Parse moneyline (h2h)
-        h2h_market = next((m for m in markets_data if m.get("key") == "h2h"), None)
-        if h2h_market:
-            outcomes = h2h_market.get("outcomes", [])
-            for outcome in outcomes:
-                if outcome.get("name") == home_team:
-                    odds_dict["home_moneyline"] = outcome.get("price")
-                elif outcome.get("name") == away_team:
-                    odds_dict["away_moneyline"] = outcome.get("price")
+        # PRIORITY 1: Check for Pinnacle odds in betGrades.edgeData (most accurate)
+        # This handles cached_odds table structure where correct odds are nested
+        bet_grades = game.get("betGrades", {})
+        edge_data = bet_grades.get("edgeData", {}) if isinstance(bet_grades, dict) else {}
+        
+        if edge_data.get("pinnacleHomeML") is not None and edge_data.get("pinnacleAwayML") is not None:
+            pinnacle_home = edge_data.get("pinnacleHomeML")
+            pinnacle_away = edge_data.get("pinnacleAwayML")
+            
+            # Validate: For moneyline, one must be negative (favorite) and one positive (underdog)
+            # If both are positive, these are invalid odds - skip them
+            if (pinnacle_home > 0 and pinnacle_away > 0):
+                # Invalid odds (both positive is impossible for moneyline)
+                # Skip and fall through to other parsing methods
+                pass
+            else:
+                # Use Pinnacle odds from edgeData (these are the correct odds)
+                odds_dict["home_moneyline"] = pinnacle_home
+                odds_dict["away_moneyline"] = pinnacle_away
+                odds_dict["bookmaker"] = "Pinnacle (from edgeData)"
+        else:
+            # PRIORITY 2: Parse moneyline from standard bookmakers structure (h2h)
+            h2h_market = next((m for m in markets_data if m.get("key") == "h2h"), None)
+            if h2h_market:
+                outcomes = h2h_market.get("outcomes", [])
+                for outcome in outcomes:
+                    if outcome.get("name") == home_team:
+                        odds_dict["home_moneyline"] = outcome.get("price")
+                    elif outcome.get("name") == away_team:
+                        odds_dict["away_moneyline"] = outcome.get("price")
+            
+            # PRIORITY 3: Fallback - check for Pinnacle in bookmakers list
+            if "home_moneyline" not in odds_dict or "away_moneyline" not in odds_dict:
+                pinnacle_bookmaker = next((b for b in bookmakers if b.get("title", "").lower() == "pinnacle"), None)
+                if pinnacle_bookmaker:
+                    pinnacle_markets = pinnacle_bookmaker.get("markets", [])
+                    pinnacle_h2h = next((m for m in pinnacle_markets if m.get("key") == "h2h"), None)
+                    if pinnacle_h2h:
+                        outcomes = pinnacle_h2h.get("outcomes", [])
+                        for outcome in outcomes:
+                            if outcome.get("name") == home_team:
+                                odds_dict["home_moneyline"] = outcome.get("price")
+                            elif outcome.get("name") == away_team:
+                                odds_dict["away_moneyline"] = outcome.get("price")
+                        if "home_moneyline" in odds_dict:
+                            odds_dict["bookmaker"] = "Pinnacle"
         
         # Parse spreads
         spreads_market = next((m for m in markets_data if m.get("key") == "spreads"), None)
@@ -471,14 +508,35 @@ def fetch_and_update_game_odds(
                 ).first()
             
             if game:
-                # Update odds
+                # Update odds with validation
                 updated = False
-                if "home_moneyline" in odds and odds["home_moneyline"]:
-                    game.home_moneyline = odds["home_moneyline"]
+                
+                # Validate moneyline odds: one must be negative (favorite), one positive (underdog)
+                # Reject if both are positive (invalid for moneyline)
+                home_ml = odds.get("home_moneyline")
+                away_ml = odds.get("away_moneyline")
+                
+                if home_ml is not None and away_ml is not None:
+                    # Check if both are positive (invalid)
+                    if home_ml > 0 and away_ml > 0:
+                        print(f"  ⚠️  Skipping invalid odds for {away_team} @ {home_team}: both positive (home={home_ml}, away={away_ml})")
+                    else:
+                        # Valid odds - update
+                        if home_ml:
+                            game.home_moneyline = home_ml
+                            updated = True
+                        if away_ml:
+                            game.away_moneyline = away_ml
+                            updated = True
+                elif home_ml is not None:
+                    # Only home odds available
+                    game.home_moneyline = home_ml
                     updated = True
-                if "away_moneyline" in odds and odds["away_moneyline"]:
-                    game.away_moneyline = odds["away_moneyline"]
+                elif away_ml is not None:
+                    # Only away odds available
+                    game.away_moneyline = away_ml
                     updated = True
+                
                 if "spread" in odds and odds["spread"]:
                     game.spread = odds["spread"]
                     updated = True
