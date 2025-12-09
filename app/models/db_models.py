@@ -20,7 +20,12 @@ class Game(Base):
     home_moneyline = Column(Float, nullable=True)
     away_moneyline = Column(Float, nullable=True)
     spread = Column(Float, nullable=True)
-    over_under = Column(Float, nullable=True)
+    over_under = Column(Float, nullable=True)  # Legacy - use closing_total instead
+    
+    # Over/Under data
+    closing_total = Column(Float, nullable=True)  # Closing O/U line from ESPN
+    actual_total = Column(Integer, nullable=True)  # Actual total points scored
+    ou_result = Column(String, nullable=True)  # OVER, UNDER, or PUSH
     
     # Final scores
     home_score = Column(Integer, nullable=True)

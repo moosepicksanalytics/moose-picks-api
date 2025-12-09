@@ -1,5 +1,6 @@
 from app.database import SessionLocal
 from app.models.db_models import Game
+from app.utils.ou_calculator import OUCalculator
 from datetime import datetime
 
 
@@ -87,6 +88,20 @@ def parse_and_store_games(sport: str, games_data: list, only_final: bool = False
                 if odds.get("spread"):
                     spread = float(odds.get("spread"))
             
+            # Extract and calculate O/U data
+            ou_data = OUCalculator.process_game_ou_data(event)
+            closing_total = ou_data.get('closing_total')
+            actual_total = ou_data.get('actual_total')
+            ou_result = ou_data.get('ou_result')
+            
+            # Fallback: if OU calculator didn't find closing_total but we have over_under, use it
+            if closing_total is None and over_under is not None:
+                closing_total = over_under
+                # Recalculate with scores if available
+                if home_score is not None and away_score is not None:
+                    actual_total = home_score + away_score
+                    ou_result = OUCalculator.determine_ou_result(actual_total, closing_total)
+            
             # Create game record
             game = Game(
                 id=game_id,
@@ -99,7 +114,10 @@ def parse_and_store_games(sport: str, games_data: list, only_final: bool = False
                 home_moneyline=home_moneyline,
                 away_moneyline=away_moneyline,
                 spread=spread,
-                over_under=over_under,
+                over_under=over_under,  # Keep for backward compatibility
+                closing_total=closing_total,
+                actual_total=actual_total,
+                ou_result=ou_result,
                 home_score=home_score,
                 away_score=away_score,
                 espn_data=event,
@@ -119,6 +137,9 @@ def parse_and_store_games(sport: str, games_data: list, only_final: bool = False
                 existing.away_moneyline = game.away_moneyline
                 existing.spread = game.spread
                 existing.over_under = game.over_under
+                existing.closing_total = game.closing_total
+                existing.actual_total = game.actual_total
+                existing.ou_result = game.ou_result
                 existing.home_score = game.home_score
                 existing.away_score = game.away_score
                 existing.espn_data = game.espn_data
