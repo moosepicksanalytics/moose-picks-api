@@ -824,6 +824,26 @@ def train_model_for_market(
                 # #endregion
                 
                 print("✓ Probability calibration applied (isotonic regression on validation set)")
+                
+                # #region agent log
+                try:
+                    with open(debug_log_path, 'a') as f:
+                        log_entry = {
+                            "sessionId": "debug-session",
+                            "runId": "run1",
+                            "hypothesisId": "L",
+                            "location": "pipeline.py:826",
+                            "message": "Calibration successful - isotonic",
+                            "data": {
+                                "calibration_type": "isotonic",
+                                "calibrator_type": str(type(calibrator))
+                            },
+                            "timestamp": int(datetime.now().timestamp() * 1000)
+                        }
+                        f.write(json.dumps(log_entry) + '\n')
+                except Exception as e:
+                    pass
+                # #endregion
             except Exception as e:
                 # #region agent log
                 try:
