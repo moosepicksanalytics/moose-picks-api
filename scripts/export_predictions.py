@@ -249,7 +249,13 @@ def predict_for_game(
         # Ensure columns are in the same order as training
         X_aligned = X_aligned[expected_features].fillna(0)
         X_scaled = ml_scaler.transform(X_aligned)
-        home_win_prob_raw = ml_model.predict_proba(X_scaled)[0, 1]
+        
+        # Use calibrated probabilities if calibrator exists (improves edge accuracy)
+        ml_calibrator = ml_model_data.get("calibrator")
+        if ml_calibrator is not None:
+            home_win_prob_raw = ml_calibrator.predict_proba(X_scaled)[0, 1]
+        else:
+            home_win_prob_raw = ml_model.predict_proba(X_scaled)[0, 1]
         away_win_prob_raw = 1 - home_win_prob_raw
         
         # Store raw probabilities (will be adjusted after all predictions)
@@ -303,7 +309,13 @@ def predict_for_game(
         # Ensure columns are in the same order as training
         X_spread_aligned = X_spread_aligned[expected_features_spread].fillna(0)
         X_spread_scaled = spread_scaler.transform(X_spread_aligned)
-        cover_prob_raw = spread_model.predict_proba(X_spread_scaled)[0, 1]
+        
+        # Use calibrated probabilities if calibrator exists
+        spread_calibrator = spread_model_data.get("calibrator")
+        if spread_calibrator is not None:
+            cover_prob_raw = spread_calibrator.predict_proba(X_spread_scaled)[0, 1]
+        else:
+            cover_prob_raw = spread_model.predict_proba(X_spread_scaled)[0, 1]
         
         # Store raw probabilities (will be adjusted after all predictions)
         predictions["_raw_spread_prob"] = cover_prob_raw
@@ -354,7 +366,13 @@ def predict_for_game(
         # Ensure columns are in the same order as training
         X_totals_aligned = X_totals_aligned[expected_features_totals].fillna(0)
         X_totals_scaled = totals_scaler.transform(X_totals_aligned)
-        over_prob_raw = totals_model.predict_proba(X_totals_scaled)[0, 1]
+        
+        # Use calibrated probabilities if calibrator exists
+        totals_calibrator = totals_model_data.get("calibrator")
+        if totals_calibrator is not None:
+            over_prob_raw = totals_calibrator.predict_proba(X_totals_scaled)[0, 1]
+        else:
+            over_prob_raw = totals_model.predict_proba(X_totals_scaled)[0, 1]
         under_prob_raw = 1 - over_prob_raw
         
         # Store raw probabilities (will be adjusted after all predictions)

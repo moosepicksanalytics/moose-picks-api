@@ -11,6 +11,7 @@ from pathlib import Path
 from datetime import datetime
 from sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor
 from sklearn.preprocessing import StandardScaler
+from sklearn.calibration import CalibratedClassifierCV
 
 # Try to import XGBoost (optional dependency)
 try:
@@ -621,10 +622,23 @@ def train_model_for_market(
         model = ModelClass(**model_params)
         model.fit(X_train_scaled, y_train)
         
-        # Note: XGBoost probabilities are generally well-calibrated for binary classification
-        # Calibration can be added later if needed, but it's causing compatibility issues
-        # For now, we'll use XGBoost's native probabilities
-        print("✓ Model trained (using native XGBoost probabilities)")
+        # Apply probability calibration to improve edge accuracy
+        # This is critical for betting - uncalibrated probabilities lead to negative edges
+        # Calibration fixes overconfident models (probabilities too high)
+        calibrator = None
+        if market != "score_projection":  # Classification models need calibration
+            print("✓ Model trained, applying probability calibration...")
+            # Use isotonic regression for better calibration (more flexible than Platt scaling)
+            # Calibrate on validation set to avoid overfitting
+            calibrator = CalibratedClassifierCV(
+                model,
+                method='isotonic',
+                cv='prefit'  # Use pre-fitted model, calibrate on validation set
+            )
+            calibrator.fit(X_val_scaled, y_val)
+            print("✓ Probability calibration applied (isotonic regression)")
+        else:
+            print("✓ Model trained (regression model, no calibration needed)")
         
         # Extract and log feature importance
         feature_importance = {}
@@ -658,10 +672,14 @@ def train_model_for_market(
                 for feat_name, importance in suspicious_features[:10]:
                     print(f"  - {feat_name}: {importance:.6f}")
         
-        # Predictions
+        # Predictions - use calibrated probabilities if available
         y_train_pred = model.predict(X_train_scaled)
         y_val_pred = model.predict(X_val_scaled)
-        y_val_pred_proba = model.predict_proba(X_val_scaled)[:, 1]
+        
+        if calibrator is not None:
+            y_val_pred_proba = calibrator.predict_proba(X_val_scaled)[:, 1]
+        else:
+            y_val_pred_proba = model.predict_proba(X_val_scaled)[:, 1] if hasattr(model, 'predict_proba') else None
         
         # Log validation accuracy and check for suspiciously high accuracy (possible leakage)
         val_acc = (y_val_pred == y_val).mean()
@@ -728,6 +746,7 @@ def train_model_for_market(
     
     model_data = {
         "model": model,
+        "calibrator": calibrator,  # Save calibrator for use in predictions
         "scaler": scaler,
         "feature_columns": available_cols,
         "sport": sport,
