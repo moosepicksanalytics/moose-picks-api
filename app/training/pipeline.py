@@ -472,13 +472,6 @@ def train_model_for_market(
     else:
         train_df, val_df = split_random(df_filtered, test_size=0.2)
     
-    # Reset index on split dataframes to ensure clean integer indices
-    train_df = train_df.reset_index(drop=True)
-    val_df = val_df.reset_index(drop=True)
-    
-    train_idx = train_df.index
-    val_idx = val_df.index
-    
     # Verify temporal split (no data leakage)
     if "date" in df_filtered.columns:
         train_dates = train_df["date"]
@@ -494,11 +487,42 @@ def train_model_for_market(
         else:
             print(f"✓ Temporal split verified: Train ends before Val starts")
     
-    # Use integer indices (after reset_index, these are 0-based sequential)
-    X_train = X.iloc[train_idx]
-    y_train = y.iloc[train_idx]
-    X_val = X.iloc[val_idx]
-    y_val = y.iloc[val_idx]
+    # Create boolean masks by matching on a unique identifier
+    # Use a combination of date and teams to uniquely identify rows
+    # This avoids index mismatches when split functions reset indices
+    if "date" in df_filtered.columns and "home_team" in df_filtered.columns and "away_team" in df_filtered.columns:
+        # Create unique identifiers for matching
+        df_filtered["_match_key"] = (
+            df_filtered["date"].astype(str) + "_" + 
+            df_filtered["home_team"].astype(str) + "_" + 
+            df_filtered["away_team"].astype(str)
+        )
+        train_df["_match_key"] = (
+            train_df["date"].astype(str) + "_" + 
+            train_df["home_team"].astype(str) + "_" + 
+            train_df["away_team"].astype(str)
+        )
+        val_df["_match_key"] = (
+            val_df["date"].astype(str) + "_" + 
+            val_df["home_team"].astype(str) + "_" + 
+            val_df["away_team"].astype(str)
+        )
+        
+        train_mask = df_filtered["_match_key"].isin(train_df["_match_key"])
+        val_mask = df_filtered["_match_key"].isin(val_df["_match_key"])
+        
+        # Clean up temporary column
+        df_filtered = df_filtered.drop(columns=["_match_key"])
+    else:
+        # Fallback: use indices (should work if split functions preserve them)
+        train_mask = df_filtered.index.isin(train_df.index)
+        val_mask = df_filtered.index.isin(val_df.index)
+    
+    # Use boolean masks to index X and y (all have same sequential indices)
+    X_train = X[train_mask]
+    y_train = y[train_mask]
+    X_val = X[val_mask]
+    y_val = y[val_mask]
     
     print(f"Training samples: {len(X_train)}, Validation samples: {len(X_val)}")
     

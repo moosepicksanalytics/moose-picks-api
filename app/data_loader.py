@@ -131,7 +131,9 @@ def split_by_season(
     if len(years) <= validation_seasons:
         # Not enough seasons, use 80/20 split
         print(f"  ⚠️  Only {len(years)} season(s) available, using 80/20 temporal split")
-        return split_temporal(df.drop(columns=["year"]), test_size=0.2)
+        # Reset index before passing to split_temporal (it will reset again internally)
+        df_clean = df.drop(columns=["year"]).reset_index(drop=True)
+        return split_temporal(df_clean, test_size=0.2)
     else:
         val_years = set(years[-validation_seasons:])
         train_df = df[~df["year"].isin(val_years)].copy()
@@ -144,11 +146,16 @@ def split_by_season(
         if val_ratio < 0.15 or len(val_df) < min_val_samples:
             print(f"  ⚠️  Validation set too small ({len(val_df)} samples, {val_ratio:.1%} of data)")
             print(f"  ⚠️  Val years {sorted(val_years)} appear incomplete. Using 80/20 temporal split instead")
-            return split_temporal(df.drop(columns=["year"]), test_size=0.2)
+            # Reset index before passing to split_temporal (it will reset again internally)
+            df_clean = df.drop(columns=["year"]).reset_index(drop=True)
+            return split_temporal(df_clean, test_size=0.2)
         else:
             print(f"  ✓ Using season-based split: {len(train_df)} train, {len(val_df)} val ({val_ratio:.1%})")
             print(f"  ✓ Validation years: {sorted(val_years)}")
-            return train_df.drop(columns=["year"]), val_df.drop(columns=["year"])
+            # Keep original indices (don't reset) so they map back to filtered dataframe
+            train_df = train_df.drop(columns=["year"])
+            val_df = val_df.drop(columns=["year"])
+            return train_df, val_df
 
 
 def split_by_week(
@@ -182,7 +189,11 @@ def split_by_week(
     train_df = df[df["weeks_from_start"] <= split_week].copy()
     val_df = df[df["weeks_from_start"] > split_week].copy()
     
-    return train_df.drop(columns=["weeks_from_start", "date_dt"]), val_df.drop(columns=["weeks_from_start", "date_dt"])
+    # Keep original indices (don't reset) so they map back to filtered dataframe
+    train_df = train_df.drop(columns=["weeks_from_start", "date_dt"])
+    val_df = val_df.drop(columns=["weeks_from_start", "date_dt"])
+    
+    return train_df, val_df
 
 
 def split_temporal(
@@ -226,7 +237,21 @@ def split_temporal(
         train_df = df[df["date_dt"] < prev_date].copy()
         val_df = df[df["date_dt"] >= prev_date].copy()
     
-    return train_df.drop(columns=["date_dt"]), val_df.drop(columns=["date_dt"])
+    # Ensure no overlap: if train_max >= val_min, move all games at that timestamp to validation
+    if len(train_df) > 0 and len(val_df) > 0:
+        train_max = train_df["date_dt"].max()
+        val_min = val_df["date_dt"].min()
+        if train_max >= val_min:
+            # All games at train_max timestamp should go to validation to prevent overlap
+            split_date = train_max
+            train_df = df[df["date_dt"] < split_date].copy()
+            val_df = df[df["date_dt"] >= split_date].copy()
+    
+    # Keep original indices (don't reset) so they map back to filtered dataframe
+    train_df = train_df.drop(columns=["date_dt"])
+    val_df = val_df.drop(columns=["date_dt"])
+    
+    return train_df, val_df
 
 
 def split_random(
@@ -252,8 +277,8 @@ def split_random(
     df = df.sample(frac=1, random_state=random_state).reset_index(drop=True)
     split_idx = int(len(df) * (1 - test_size))
     
-    train_df = df.iloc[:split_idx].copy()
-    val_df = df.iloc[split_idx:].copy()
+    train_df = df.iloc[:split_idx].copy().reset_index(drop=True)
+    val_df = df.iloc[split_idx:].copy().reset_index(drop=True)
     
     return train_df, val_df
 
