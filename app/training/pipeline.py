@@ -31,6 +31,28 @@ from app.training.features import build_features, get_feature_columns
 from app.training.evaluate import evaluate_model_comprehensive
 
 
+class CalibratedModelWrapper:
+    """Wrapper that applies isotonic calibration to model predictions."""
+    def __init__(self, base_model, calibrator):
+        self.base_model = base_model
+        self.calibrator = calibrator
+    
+    def predict_proba(self, X):
+        """Get calibrated probabilities."""
+        import numpy as np
+        raw_proba = self.base_model.predict_proba(X)[:, 1]
+        calibrated = self.calibrator.predict(raw_proba)
+        # Ensure probabilities are in [0, 1] range
+        calibrated = np.clip(calibrated, 0.0, 1.0)
+        # Return in sklearn format [prob_class_0, prob_class_1]
+        return np.column_stack([1 - calibrated, calibrated])
+    
+    def predict(self, X):
+        """Get binary predictions."""
+        proba = self.predict_proba(X)
+        return (proba[:, 1] >= 0.5).astype(int)
+
+
 def validate_no_leakage(df: pd.DataFrame, features: list, target_col: str = None) -> bool:
     """
     Validate that features don't contain data leakage.
@@ -682,7 +704,11 @@ def train_model_for_market(
             # sklearn 1.6+ deprecated cv='prefit', so we manually calibrate on validation set
             # This is the recommended approach: calibrate on held-out validation data
             try:
-                from sklearn.isotonic import IsotonicRegression
+                try:
+                    from sklearn.isotonic import IsotonicRegression
+                except ImportError as import_err:
+                    raise ImportError(f"Failed to import IsotonicRegression: {import_err}. "
+                                    f"scikit-learn may not be properly installed.") from import_err
                 import numpy as np
                 
                 # #region agent log
@@ -706,33 +732,55 @@ def train_model_for_market(
                 # #endregion
                 
                 # Get raw predictions from trained model on validation set
+                # Ensure we have numpy arrays
+                if isinstance(X_val_scaled, pd.DataFrame):
+                    X_val_scaled = X_val_scaled.values
+                if isinstance(y_val, pd.Series):
+                    y_val = y_val.values
+                
                 val_proba_raw = model.predict_proba(X_val_scaled)[:, 1]
+                
+                # Convert to numpy array if needed
+                val_proba_raw = np.asarray(val_proba_raw).ravel()
+                y_val = np.asarray(y_val).ravel()
+                
+                # #region agent log
+                try:
+                    with open(debug_log_path, 'a') as f:
+                        log_entry = {
+                            "sessionId": "debug-session",
+                            "runId": "run1",
+                            "hypothesisId": "K",
+                            "location": "pipeline.py:715",
+                            "message": "Got validation predictions",
+                            "data": {
+                                "val_proba_shape": list(val_proba_raw.shape) if hasattr(val_proba_raw, 'shape') else str(type(val_proba_raw)),
+                                "val_proba_min": float(np.min(val_proba_raw)) if len(val_proba_raw) > 0 else None,
+                                "val_proba_max": float(np.max(val_proba_raw)) if len(val_proba_raw) > 0 else None,
+                                "val_proba_unique": int(len(np.unique(val_proba_raw))) if len(val_proba_raw) > 0 else 0,
+                                "y_val_shape": list(y_val.shape) if hasattr(y_val, 'shape') else str(type(y_val)),
+                                "y_val_unique": int(len(np.unique(y_val))) if len(y_val) > 0 else 0
+                            },
+                            "timestamp": int(datetime.now().timestamp() * 1000)
+                        }
+                        f.write(json.dumps(log_entry) + '\n')
+                except Exception as e:
+                    pass
+                # #endregion
+                
+                # Check if we have enough unique values for isotonic regression
+                if len(val_proba_raw) == 0:
+                    raise ValueError("No validation predictions available for calibration")
+                if len(np.unique(val_proba_raw)) < 2:
+                    raise ValueError(f"Not enough unique predictions for calibration: {len(np.unique(val_proba_raw))} unique values")
+                if len(y_val) != len(val_proba_raw):
+                    raise ValueError(f"Length mismatch: y_val={len(y_val)}, val_proba_raw={len(val_proba_raw)}")
                 
                 # Fit isotonic regression to calibrate probabilities
                 iso_reg = IsotonicRegression(out_of_bounds='clip')
                 iso_reg.fit(val_proba_raw, y_val)
                 
-                # Create a wrapper class that applies calibration during prediction
-                class CalibratedModelWrapper:
-                    """Wrapper that applies isotonic calibration to model predictions."""
-                    def __init__(self, base_model, calibrator):
-                        self.base_model = base_model
-                        self.calibrator = calibrator
-                    
-                    def predict_proba(self, X):
-                        """Get calibrated probabilities."""
-                        raw_proba = self.base_model.predict_proba(X)[:, 1]
-                        calibrated = self.calibrator.predict(raw_proba)
-                        # Ensure probabilities are in [0, 1] range
-                        calibrated = np.clip(calibrated, 0.0, 1.0)
-                        # Return in sklearn format [prob_class_0, prob_class_1]
-                        return np.column_stack([1 - calibrated, calibrated])
-                    
-                    def predict(self, X):
-                        """Get binary predictions."""
-                        proba = self.predict_proba(X)
-                        return (proba[:, 1] >= 0.5).astype(int)
-                
+                # Use module-level wrapper class for proper serialization
                 calibrator = CalibratedModelWrapper(model, iso_reg)
                 
                 # #region agent log
