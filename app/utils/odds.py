@@ -79,6 +79,8 @@ def calculate_moneyline_edge(
     home_edge = home_win_prob - home_implied
     away_edge = away_win_prob - away_implied
     
+    # Only recommend a side if it has a positive edge
+    # If both edges are negative, don't recommend either side
     if home_edge > away_edge and home_edge > 0:
         best_side = "home"
         best_edge = home_edge
@@ -86,8 +88,9 @@ def calculate_moneyline_edge(
         best_side = "away"
         best_edge = away_edge
     else:
+        # Both edges are negative or zero - no value bet
         best_side = None
-        best_edge = max(home_edge, away_edge)
+        best_edge = max(home_edge, away_edge)  # Most negative (least bad)
     
     return {
         "home_edge": home_edge,

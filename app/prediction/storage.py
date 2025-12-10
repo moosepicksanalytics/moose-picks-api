@@ -127,6 +127,16 @@ def store_predictions_for_game(
     if "moneyline" in predictions_dict and predictions_dict["moneyline"]:
         ml = predictions_dict["moneyline"]
         if "home_win_prob" in ml:
+            # Only store if there's a valid recommendation (best_side exists and edge > 0)
+            # If best_side is None, it means no value bet (negative or zero edge)
+            best_side = ml.get("best_side")
+            best_edge = ml.get("best_edge", 0)
+            
+            # Store prediction even if no value bet (for tracking purposes)
+            # But log a warning if edge is negative
+            if best_edge < 0:
+                print(f"  ⚠️  Storing prediction with negative edge ({best_edge:.1%}) - no value bet recommended")
+            
             try:
                 pred = store_prediction(
                     game_id=game_id,

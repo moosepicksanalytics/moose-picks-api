@@ -445,6 +445,12 @@ def predict_for_game(
         if abs(ml_edges["best_edge"]) > 0.10:
             logger.warning(f"Unrealistic moneyline edge: {ml_edges['best_edge']:.1%}")
         
+        # CRITICAL: Don't recommend sides with negative edges
+        # If best_edge is negative, set best_side to None (no value bet)
+        if ml_edges["best_edge"] < 0:
+            logger.warning(f"Negative edge detected ({ml_edges['best_edge']:.1%}) - not recommending any side")
+            ml_edges["best_side"] = None
+        
         # Validate probabilities before storing
         from app.prediction.validation import validate_prediction_before_storage
         if ml_edges["best_side"]:
@@ -470,7 +476,7 @@ def predict_for_game(
             "away_implied_prob": american_odds_to_implied_prob(game.away_moneyline) if game.away_moneyline else 0.5,
             "home_edge": ml_edges["home_edge"],
             "away_edge": ml_edges["away_edge"],
-            "best_side": ml_edges["best_side"],
+            "best_side": ml_edges["best_side"],  # Will be None if negative edge
             "best_edge": ml_edges["best_edge"],
         }
         
@@ -498,6 +504,11 @@ def predict_for_game(
         
         if abs(totals_edges["best_edge"]) > 0.10:
             logger.warning(f"Unrealistic totals edge: {totals_edges['best_edge']:.1%}")
+        
+        # CRITICAL: Don't recommend sides with negative edges
+        if totals_edges["best_edge"] < 0:
+            logger.warning(f"Negative totals edge detected ({totals_edges['best_edge']:.1%}) - not recommending any side")
+            totals_edges["best_side"] = None
         
         predictions["totals"] = {
             "over_prob": total_prob_adj,
@@ -529,6 +540,12 @@ def predict_for_game(
         )
         if abs(ml_edges["best_edge"]) > 0.10:
             logger.warning(f"Unrealistic moneyline edge: {ml_edges['best_edge']:.1%}")
+        
+        # CRITICAL: Don't recommend sides with negative edges
+        if ml_edges["best_edge"] < 0:
+            logger.warning(f"Negative edge detected ({ml_edges['best_edge']:.1%}) - not recommending any side")
+            ml_edges["best_side"] = None
+        
         predictions["moneyline"] = {
             "home_win_prob": ml_prob_adj,
             "away_win_prob": away_win_prob_adj,
@@ -538,7 +555,7 @@ def predict_for_game(
             "away_implied_prob": american_odds_to_implied_prob(game.away_moneyline) if game.away_moneyline else 0.5,
             "home_edge": ml_edges["home_edge"],
             "away_edge": ml_edges["away_edge"],
-            "best_side": ml_edges["best_side"],
+            "best_side": ml_edges["best_side"],  # Will be None if negative edge
             "best_edge": ml_edges["best_edge"],
         }
         predictions.pop("_raw_ml_prob", None)
