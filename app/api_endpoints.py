@@ -979,6 +979,64 @@ def get_predictions_next_days(
     )
 
 
+@router.get("/validate-probabilities")
+def validate_model_probabilities(
+    sport: str,
+    market: str
+):
+    """
+    Validate model probabilities and analyze edge distributions.
+    
+    Checks calibration, edge distribution, and historical performance.
+    
+    Args:
+        sport: Sport code (NFL, NHL, NBA, MLB)
+        market: Market type (moneyline, spread, totals)
+    
+    Returns:
+        Validation results including calibration metrics and edge analysis
+        
+    Example:
+        GET /api/validate-probabilities?sport=NHL&market=moneyline
+    """
+    import sys
+    from pathlib import Path
+    import io
+    from contextlib import redirect_stdout, redirect_stderr
+    
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from scripts.validate_model_probabilities import validate_model
+    
+    # Capture output
+    output = io.StringIO()
+    error_output = io.StringIO()
+    
+    try:
+        with redirect_stdout(output), redirect_stderr(error_output):
+            validate_model(sport.upper(), market.lower())
+        
+        result_text = output.getvalue()
+        error_text = error_output.getvalue()
+        
+        return {
+            "status": "success",
+            "sport": sport.upper(),
+            "market": market.lower(),
+            "output": result_text,
+            "errors": error_text if error_text else None
+        }
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        return {
+            "status": "error",
+            "sport": sport.upper(),
+            "market": market.lower(),
+            "error": str(e),
+            "traceback": error_trace
+        }
+
+
 @router.get("/predictions/week")
 def get_predictions_this_week(
     sport: str,
