@@ -679,18 +679,11 @@ def train_model_for_market(
             # #endregion
             
             # Use isotonic regression for better calibration (more flexible than Platt scaling)
-            # sklearn 1.6+ deprecated cv='prefit', so we use cross-validation instead
-            # This is slightly slower but more robust and compatible with sklearn 1.7+
+            # sklearn 1.6+ deprecated cv='prefit', so we manually calibrate on validation set
+            # This is the recommended approach: calibrate on held-out validation data
             try:
-                from sklearn.calibration import CalibratedClassifierCV
-                
-                # Use 3-fold CV for calibration (smaller than default 5-fold for speed)
-                # This works with sklearn 1.6+ and doesn't require prefit
-                calibrator = CalibratedClassifierCV(
-                    model,
-                    method='isotonic',
-                    cv=3  # Use cross-validation instead of deprecated prefit
-                )
+                from sklearn.isotonic import IsotonicRegression
+                import numpy as np
                 
                 # #region agent log
                 try:
@@ -698,13 +691,12 @@ def train_model_for_market(
                         log_entry = {
                             "sessionId": "debug-session",
                             "runId": "run1",
-                            "hypothesisId": "F",
-                            "location": "pipeline.py:690",
-                            "message": "Calibrator created with CV, about to fit",
+                            "hypothesisId": "H",
+                            "location": "pipeline.py:685",
+                            "message": "Starting manual calibration on validation set",
                             "data": {
-                                "calibrator_created": True,
-                                "method": "isotonic",
-                                "cv": 3
+                                "val_samples": len(X_val_scaled),
+                                "model_type": str(type(model))
                             },
                             "timestamp": int(datetime.now().timestamp() * 1000)
                         }
@@ -713,9 +705,57 @@ def train_model_for_market(
                     pass
                 # #endregion
                 
-                # Fit on training data (CV will handle the splits internally)
-                calibrator.fit(X_train_scaled, y_train)
-                print("✓ Probability calibration applied (isotonic regression with 3-fold CV)")
+                # Get raw predictions from trained model on validation set
+                val_proba_raw = model.predict_proba(X_val_scaled)[:, 1]
+                
+                # Fit isotonic regression to calibrate probabilities
+                iso_reg = IsotonicRegression(out_of_bounds='clip')
+                iso_reg.fit(val_proba_raw, y_val)
+                
+                # Create a wrapper class that applies calibration during prediction
+                class CalibratedModelWrapper:
+                    """Wrapper that applies isotonic calibration to model predictions."""
+                    def __init__(self, base_model, calibrator):
+                        self.base_model = base_model
+                        self.calibrator = calibrator
+                    
+                    def predict_proba(self, X):
+                        """Get calibrated probabilities."""
+                        raw_proba = self.base_model.predict_proba(X)[:, 1]
+                        calibrated = self.calibrator.predict(raw_proba)
+                        # Ensure probabilities are in [0, 1] range
+                        calibrated = np.clip(calibrated, 0.0, 1.0)
+                        # Return in sklearn format [prob_class_0, prob_class_1]
+                        return np.column_stack([1 - calibrated, calibrated])
+                    
+                    def predict(self, X):
+                        """Get binary predictions."""
+                        proba = self.predict_proba(X)
+                        return (proba[:, 1] >= 0.5).astype(int)
+                
+                calibrator = CalibratedModelWrapper(model, iso_reg)
+                
+                # #region agent log
+                try:
+                    with open(debug_log_path, 'a') as f:
+                        log_entry = {
+                            "sessionId": "debug-session",
+                            "runId": "run1",
+                            "hypothesisId": "I",
+                            "location": "pipeline.py:730",
+                            "message": "Manual calibration successful",
+                            "data": {
+                                "calibration_applied": True,
+                                "val_samples_used": len(X_val_scaled)
+                            },
+                            "timestamp": int(datetime.now().timestamp() * 1000)
+                        }
+                        f.write(json.dumps(log_entry) + '\n')
+                except Exception as e:
+                    pass
+                # #endregion
+                
+                print("✓ Probability calibration applied (isotonic regression on validation set)")
             except Exception as e:
                 # #region agent log
                 try:
@@ -723,9 +763,9 @@ def train_model_for_market(
                         log_entry = {
                             "sessionId": "debug-session",
                             "runId": "run1",
-                            "hypothesisId": "G",
-                            "location": "pipeline.py:710",
-                            "message": "Calibration failed completely",
+                            "hypothesisId": "J",
+                            "location": "pipeline.py:740",
+                            "message": "Manual calibration failed",
                             "data": {
                                 "error_type": type(e).__name__,
                                 "error_message": str(e),
