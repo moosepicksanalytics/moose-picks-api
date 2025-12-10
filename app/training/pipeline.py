@@ -53,6 +53,26 @@ class CalibratedModelWrapper:
         return (proba[:, 1] >= 0.5).astype(int)
 
 
+class PlattCalibratedWrapper:
+    """Wrapper that applies Platt scaling (logistic regression) calibration."""
+    def __init__(self, base_model, scaler):
+        self.base_model = base_model
+        self.scaler = scaler
+    
+    def predict_proba(self, X):
+        """Get calibrated probabilities."""
+        import numpy as np
+        raw_proba = self.base_model.predict_proba(X)[:, 1]
+        calibrated = self.scaler.predict_proba(raw_proba.reshape(-1, 1))[:, 1]
+        calibrated = np.clip(calibrated, 0.0, 1.0)
+        return np.column_stack([1 - calibrated, calibrated])
+    
+    def predict(self, X):
+        """Get binary predictions."""
+        proba = self.predict_proba(X)
+        return (proba[:, 1] >= 0.5).astype(int)
+
+
 def validate_no_leakage(df: pd.DataFrame, features: list, target_col: str = None) -> bool:
     """
     Validate that features don't contain data leakage.
@@ -826,8 +846,28 @@ def train_model_for_market(
                     pass
                 # #endregion
                 
-                print(f"⚠️  Calibration failed: {e}. Continuing without calibration.")
-                calibrator = None
+                # Try simpler Platt scaling as fallback
+                print(f"⚠️  Isotonic calibration failed ({e}), trying Platt scaling (logistic regression)...")
+                try:
+                    from sklearn.linear_model import LogisticRegression
+                    
+                    # Get predictions on validation set
+                    val_proba_raw = model.predict_proba(X_val_scaled)[:, 1]
+                    val_proba_raw = np.asarray(val_proba_raw).reshape(-1, 1)
+                    y_val_array = np.asarray(y_val).ravel()
+                    
+                    # Fit logistic regression for Platt scaling
+                    platt_scaler = LogisticRegression()
+                    platt_scaler.fit(val_proba_raw, y_val_array)
+                    
+                    # Use module-level wrapper class
+                    calibrator = PlattCalibratedWrapper(model, platt_scaler)
+                    print("✓ Probability calibration applied (Platt scaling/logistic regression)")
+                except Exception as e2:
+                    print(f"⚠️  Both calibration methods failed. Continuing without calibration.")
+                    print(f"   Isotonic error: {e}")
+                    print(f"   Platt error: {e2}")
+                    calibrator = None
         else:
             print("✓ Model trained (regression model, no calibration needed)")
         
@@ -867,8 +907,13 @@ def train_model_for_market(
         y_train_pred = model.predict(X_train_scaled)
         y_val_pred = model.predict(X_val_scaled)
         
+        # Get validation probabilities (calibrated if available, otherwise raw)
         if calibrator is not None:
-            y_val_pred_proba = calibrator.predict_proba(X_val_scaled)[:, 1]
+            try:
+                y_val_pred_proba = calibrator.predict_proba(X_val_scaled)[:, 1]
+            except Exception as e:
+                print(f"⚠️  Error using calibrator for validation predictions: {e}. Using raw probabilities.")
+                y_val_pred_proba = model.predict_proba(X_val_scaled)[:, 1] if hasattr(model, 'predict_proba') else None
         else:
             y_val_pred_proba = model.predict_proba(X_val_scaled)[:, 1] if hasattr(model, 'predict_proba') else None
         
