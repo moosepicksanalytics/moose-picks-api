@@ -622,21 +622,124 @@ def train_model_for_market(
         model = ModelClass(**model_params)
         model.fit(X_train_scaled, y_train)
         
+        # #region agent log
+        import json
+        import os
+        debug_log_path = os.path.join(os.path.dirname(__file__), '..', '.cursor', 'debug.log')
+        try:
+            with open(debug_log_path, 'a') as f:
+                log_entry = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "A",
+                    "location": "pipeline.py:622",
+                    "message": "Model created and fitted",
+                    "data": {
+                        "model_type": str(type(model)),
+                        "model_class_name": ModelClass.__name__,
+                        "algorithm": algorithm,
+                        "market": market,
+                        "has_predict_proba": hasattr(model, 'predict_proba'),
+                        "is_classifier": hasattr(model, 'predict_proba')
+                    },
+                    "timestamp": int(datetime.now().timestamp() * 1000)
+                }
+                f.write(json.dumps(log_entry) + '\n')
+        except Exception as e:
+            pass
+        # #endregion
+        
         # Apply probability calibration to improve edge accuracy
         # This is critical for betting - uncalibrated probabilities lead to negative edges
         # Calibration fixes overconfident models (probabilities too high)
         calibrator = None
         if market != "score_projection":  # Classification models need calibration
             print("✓ Model trained, applying probability calibration...")
+            
+            # #region agent log
+            try:
+                import sklearn
+                with open(debug_log_path, 'a') as f:
+                    log_entry = {
+                        "sessionId": "debug-session",
+                        "runId": "run1",
+                        "hypothesisId": "B",
+                        "location": "pipeline.py:630",
+                        "message": "Before calibration setup",
+                        "data": {
+                            "sklearn_version": sklearn.__version__,
+                            "model_type_str": str(type(model)),
+                            "model_module": type(model).__module__
+                        },
+                        "timestamp": int(datetime.now().timestamp() * 1000)
+                    }
+                    f.write(json.dumps(log_entry) + '\n')
+            except Exception as e:
+                pass
+            # #endregion
+            
             # Use isotonic regression for better calibration (more flexible than Platt scaling)
-            # Calibrate on validation set to avoid overfitting
-            calibrator = CalibratedClassifierCV(
-                model,
-                method='isotonic',
-                cv='prefit'  # Use pre-fitted model, calibrate on validation set
-            )
-            calibrator.fit(X_val_scaled, y_val)
-            print("✓ Probability calibration applied (isotonic regression)")
+            # sklearn 1.6+ deprecated cv='prefit', so we use cross-validation instead
+            # This is slightly slower but more robust and compatible with sklearn 1.7+
+            try:
+                from sklearn.calibration import CalibratedClassifierCV
+                
+                # Use 3-fold CV for calibration (smaller than default 5-fold for speed)
+                # This works with sklearn 1.6+ and doesn't require prefit
+                calibrator = CalibratedClassifierCV(
+                    model,
+                    method='isotonic',
+                    cv=3  # Use cross-validation instead of deprecated prefit
+                )
+                
+                # #region agent log
+                try:
+                    with open(debug_log_path, 'a') as f:
+                        log_entry = {
+                            "sessionId": "debug-session",
+                            "runId": "run1",
+                            "hypothesisId": "F",
+                            "location": "pipeline.py:690",
+                            "message": "Calibrator created with CV, about to fit",
+                            "data": {
+                                "calibrator_created": True,
+                                "method": "isotonic",
+                                "cv": 3
+                            },
+                            "timestamp": int(datetime.now().timestamp() * 1000)
+                        }
+                        f.write(json.dumps(log_entry) + '\n')
+                except Exception as e:
+                    pass
+                # #endregion
+                
+                # Fit on training data (CV will handle the splits internally)
+                calibrator.fit(X_train_scaled, y_train)
+                print("✓ Probability calibration applied (isotonic regression with 3-fold CV)")
+            except Exception as e:
+                # #region agent log
+                try:
+                    with open(debug_log_path, 'a') as f:
+                        log_entry = {
+                            "sessionId": "debug-session",
+                            "runId": "run1",
+                            "hypothesisId": "G",
+                            "location": "pipeline.py:710",
+                            "message": "Calibration failed completely",
+                            "data": {
+                                "error_type": type(e).__name__,
+                                "error_message": str(e),
+                                "error_repr": repr(e)
+                            },
+                            "timestamp": int(datetime.now().timestamp() * 1000)
+                        }
+                        f.write(json.dumps(log_entry) + '\n')
+                except Exception as e2:
+                    pass
+                # #endregion
+                
+                print(f"⚠️  Calibration failed: {e}. Continuing without calibration.")
+                calibrator = None
         else:
             print("✓ Model trained (regression model, no calibration needed)")
         
