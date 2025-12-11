@@ -496,6 +496,73 @@ def health_check():
         db.close()
 
 
+@router.get("/debug-logs")
+def get_debug_logs(limit: Optional[int] = 100):
+    """
+    Retrieve debug logs from .cursor/debug.log file.
+    
+    Args:
+        limit: Maximum number of log entries to return (default: 100, use 0 for all)
+    
+    Returns:
+        JSON object with log entries and metadata
+    """
+    from pathlib import Path
+    import json
+    
+    # Path to debug log file
+    debug_log_path = Path(__file__).parent.parent / ".cursor" / "debug.log"
+    
+    if not debug_log_path.exists():
+        return {
+            "status": "not_found",
+            "message": "Debug log file does not exist yet. Run predictions first.",
+            "path": str(debug_log_path),
+            "entries": [],
+            "count": 0
+        }
+    
+    try:
+        # Read all lines from the log file
+        with open(debug_log_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+        
+        # Parse each line as JSON (NDJSON format)
+        entries = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+                entries.append(entry)
+            except json.JSONDecodeError:
+                # Skip invalid JSON lines
+                continue
+        
+        # Reverse to get most recent first, then apply limit
+        entries.reverse()
+        if limit and limit > 0:
+            entries = entries[:limit]
+        
+        return {
+            "status": "success",
+            "path": str(debug_log_path),
+            "total_entries": len(entries),
+            "file_size_bytes": debug_log_path.stat().st_size,
+            "entries": entries
+        }
+    
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Error reading debug log: {str(e)}",
+            "path": str(debug_log_path),
+            "entries": [],
+            "count": 0
+        }
+
+
 @router.get("/predictions/latest")
 def get_latest_predictions(sport: str = "NFL", limit: int = 10):
     """
