@@ -252,10 +252,72 @@ def predict_for_game(
         
         # Use calibrated probabilities if calibrator exists (improves edge accuracy)
         ml_calibrator = ml_model_data.get("calibrator")
+        
+        # #region agent log
+        try:
+            import json
+            debug_log_path = Path(__file__).parent.parent / ".cursor" / "debug.log"
+            with open(debug_log_path, 'a') as f:
+                log_entry = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "M",
+                    "location": "export_predictions.py:254",
+                    "message": "Checking for moneyline calibrator",
+                    "data": {
+                        "has_calibrator": ml_calibrator is not None,
+                        "calibrator_type": str(type(ml_calibrator)) if ml_calibrator is not None else None,
+                        "model_keys": list(ml_model_data.keys())
+                    },
+                    "timestamp": int(datetime.now().timestamp() * 1000)
+                }
+                f.write(json.dumps(log_entry) + '\n')
+        except Exception as e:
+            pass
+        # #endregion
+        
         if ml_calibrator is not None:
             home_win_prob_raw = ml_calibrator.predict_proba(X_scaled)[0, 1]
+            
+            # #region agent log
+            try:
+                with open(debug_log_path, 'a') as f:
+                    log_entry = {
+                        "sessionId": "debug-session",
+                        "runId": "run1",
+                        "hypothesisId": "M",
+                        "location": "export_predictions.py:275",
+                        "message": "Using calibrated probability",
+                        "data": {
+                            "calibrated_prob": float(home_win_prob_raw)
+                        },
+                        "timestamp": int(datetime.now().timestamp() * 1000)
+                    }
+                    f.write(json.dumps(log_entry) + '\n')
+            except Exception as e:
+                pass
+            # #endregion
         else:
             home_win_prob_raw = ml_model.predict_proba(X_scaled)[0, 1]
+            
+            # #region agent log
+            try:
+                with open(debug_log_path, 'a') as f:
+                    log_entry = {
+                        "sessionId": "debug-session",
+                        "runId": "run1",
+                        "hypothesisId": "M",
+                        "location": "export_predictions.py:290",
+                        "message": "Using raw (uncalibrated) probability",
+                        "data": {
+                            "raw_prob": float(home_win_prob_raw)
+                        },
+                        "timestamp": int(datetime.now().timestamp() * 1000)
+                    }
+                    f.write(json.dumps(log_entry) + '\n')
+            except Exception as e:
+                pass
+            # #endregion
         away_win_prob_raw = 1 - home_win_prob_raw
         
         # Store raw probabilities (will be adjusted after all predictions)
