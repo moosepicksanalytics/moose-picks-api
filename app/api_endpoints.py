@@ -627,17 +627,8 @@ def get_latest_predictions(sport: str = "NFL", limit: int = 10):
             logger.warning(f"Error fetching games: {game_error}")
             games = {}
         
-        # Helper function to safely convert float values (handle nan)
-        import math
-        def safe_float(value):
-            """Convert float to JSON-safe value (None if nan or None)."""
-            if value is None:
-                return None
-            if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
-                return None
-            return float(value) if value is not None else None
-        
-        # Import edge calculation utilities
+        # Import JSON sanitization and edge calculation utilities
+        from app.utils.json_sanitize import safe_float, sanitize_dict
         from app.utils.odds import (
             calculate_moneyline_edge,
             calculate_spread_edge,
@@ -676,18 +667,22 @@ def get_latest_predictions(sport: str = "NFL", limit: int = 10):
                         safe_float(game.home_moneyline),
                         safe_float(game.away_moneyline)
                     )
+                    # Sanitize edge calculation results to remove NaN/Inf
+                    ml_edges = sanitize_dict(ml_edges)
+                    
                     # Use best_side from edge calculation (which side has positive edge)
                     # This ensures we recommend the side with value, not just the favorite
-                    if ml_edges["best_side"] and ml_edges["best_edge"] > 0:
+                    best_edge = safe_float(ml_edges.get("best_edge", 0))
+                    if ml_edges.get("best_side") and best_edge is not None and best_edge > 0:
                         pick["side"] = ml_edges["best_side"]
-                        pick["edge"] = ml_edges["best_edge"]
+                        pick["edge"] = best_edge
                     else:
                         # No positive edge, use probability-based side
                         pick["side"] = "home" if home_prob and home_prob > 0.5 else "away"
                         if pick["side"] == "home":
-                            pick["edge"] = ml_edges["home_edge"] if ml_edges["home_edge"] else 0.0
+                            pick["edge"] = safe_float(ml_edges.get("home_edge")) or 0.0
                         else:
-                            pick["edge"] = ml_edges["away_edge"] if ml_edges["away_edge"] else 0.0
+                            pick["edge"] = safe_float(ml_edges.get("away_edge")) or 0.0
                 else:
                     # No odds available, use probability-based side
                     pick["side"] = "home" if home_prob and home_prob > 0.5 else "away"
@@ -700,8 +695,9 @@ def get_latest_predictions(sport: str = "NFL", limit: int = 10):
                 
                 # Calculate actual edge using odds (default to -110 if no odds)
                 spread_odds = safe_float(game.spread_odds) if hasattr(game, 'spread_odds') and game.spread_odds else -110.0
-                if spread_prob is not None:
-                    pick["edge"] = calculate_spread_edge(spread_prob, spread_odds)
+                if spread_prob is not None and spread_odds is not None:
+                    edge = calculate_spread_edge(spread_prob, spread_odds)
+                    pick["edge"] = safe_float(edge) or 0.0
                 else:
                     pick["edge"] = 0.0
             elif pred.market == "totals" or pred.market == "over_under":
@@ -714,12 +710,15 @@ def get_latest_predictions(sport: str = "NFL", limit: int = 10):
                 # Calculate actual edge using odds (default to -110 if no odds)
                 over_odds = safe_float(game.over_odds) if hasattr(game, 'over_odds') and game.over_odds else -110.0
                 under_odds = safe_float(game.under_odds) if hasattr(game, 'under_odds') and game.under_odds else -110.0
-                if over_prob is not None:
+                if over_prob is not None and over_odds is not None and under_odds is not None:
                     totals_edges = calculate_totals_edge(over_prob, under_prob, over_odds, under_odds)
+                    # Sanitize edge calculation results to remove NaN/Inf
+                    totals_edges = sanitize_dict(totals_edges)
+                    
                     if pick["side"] == "over":
-                        pick["edge"] = totals_edges["over_edge"] if totals_edges["over_edge"] else 0.0
+                        pick["edge"] = safe_float(totals_edges.get("over_edge")) or 0.0
                     else:
-                        pick["edge"] = totals_edges["under_edge"] if totals_edges["under_edge"] else 0.0
+                        pick["edge"] = safe_float(totals_edges.get("under_edge")) or 0.0
                 else:
                     pick["edge"] = 0.0
             
@@ -729,7 +728,10 @@ def get_latest_predictions(sport: str = "NFL", limit: int = 10):
             picks.append(pick)
         
         # Sort by edge and limit
-        picks_sorted = sorted(picks, key=lambda x: x.get("edge", 0), reverse=True)[:limit]
+        picks_sorted = sorted(picks, key=lambda x: x.get("edge", 0) or 0, reverse=True)[:limit]
+        
+        # Final sanitization pass to ensure all values are JSON-safe
+        picks_sorted = [sanitize_dict(pick) for pick in picks_sorted]
         
         return {
             "sport": sport,
@@ -915,17 +917,8 @@ def get_predictions_by_date_range(
             Prediction.settled == False  # Only unsettled predictions
         ).all()
         
-        # Helper function to safely convert float values (handle nan)
-        import math
-        def safe_float(value):
-            """Convert float to JSON-safe value (None if nan or None)."""
-            if value is None:
-                return None
-            if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
-                return None
-            return float(value) if value is not None else None
-        
-        # Import edge calculation utilities
+        # Import JSON sanitization and edge calculation utilities
+        from app.utils.json_sanitize import safe_float, sanitize_dict
         from app.utils.odds import (
             calculate_moneyline_edge,
             calculate_spread_edge,
@@ -964,18 +957,22 @@ def get_predictions_by_date_range(
                         safe_float(game.home_moneyline),
                         safe_float(game.away_moneyline)
                     )
+                    # Sanitize edge calculation results to remove NaN/Inf
+                    ml_edges = sanitize_dict(ml_edges)
+                    
                     # Use best_side from edge calculation (which side has positive edge)
                     # This ensures we recommend the side with value, not just the favorite
-                    if ml_edges["best_side"] and ml_edges["best_edge"] > 0:
+                    best_edge = safe_float(ml_edges.get("best_edge", 0))
+                    if ml_edges.get("best_side") and best_edge is not None and best_edge > 0:
                         pick["side"] = ml_edges["best_side"]
-                        pick["edge"] = ml_edges["best_edge"]
+                        pick["edge"] = best_edge
                     else:
                         # No positive edge, use probability-based side
                         pick["side"] = "home" if home_prob and home_prob > 0.5 else "away"
                         if pick["side"] == "home":
-                            pick["edge"] = ml_edges["home_edge"] if ml_edges["home_edge"] else 0.0
+                            pick["edge"] = safe_float(ml_edges.get("home_edge")) or 0.0
                         else:
-                            pick["edge"] = ml_edges["away_edge"] if ml_edges["away_edge"] else 0.0
+                            pick["edge"] = safe_float(ml_edges.get("away_edge")) or 0.0
                 else:
                     # No odds available, use probability-based side
                     pick["side"] = "home" if home_prob and home_prob > 0.5 else "away"
@@ -988,8 +985,9 @@ def get_predictions_by_date_range(
                 
                 # Calculate actual edge using odds (default to -110 if no odds)
                 spread_odds = safe_float(game.spread_odds) if hasattr(game, 'spread_odds') and game.spread_odds else -110.0
-                if spread_prob is not None:
-                    pick["edge"] = calculate_spread_edge(spread_prob, spread_odds)
+                if spread_prob is not None and spread_odds is not None:
+                    edge = calculate_spread_edge(spread_prob, spread_odds)
+                    pick["edge"] = safe_float(edge) or 0.0
                 else:
                     pick["edge"] = 0.0
             elif pred.market == "totals" or pred.market == "over_under":
@@ -1002,12 +1000,15 @@ def get_predictions_by_date_range(
                 # Calculate actual edge using odds (default to -110 if no odds)
                 over_odds = safe_float(game.over_odds) if hasattr(game, 'over_odds') and game.over_odds else -110.0
                 under_odds = safe_float(game.under_odds) if hasattr(game, 'under_odds') and game.under_odds else -110.0
-                if over_prob is not None:
+                if over_prob is not None and over_odds is not None and under_odds is not None:
                     totals_edges = calculate_totals_edge(over_prob, under_prob, over_odds, under_odds)
+                    # Sanitize edge calculation results to remove NaN/Inf
+                    totals_edges = sanitize_dict(totals_edges)
+                    
                     if pick["side"] == "over":
-                        pick["edge"] = totals_edges["over_edge"] if totals_edges["over_edge"] else 0.0
+                        pick["edge"] = safe_float(totals_edges.get("over_edge")) or 0.0
                     else:
-                        pick["edge"] = totals_edges["under_edge"] if totals_edges["under_edge"] else 0.0
+                        pick["edge"] = safe_float(totals_edges.get("under_edge")) or 0.0
                 else:
                     pick["edge"] = 0.0
             
@@ -1017,7 +1018,10 @@ def get_predictions_by_date_range(
             picks.append(pick)
         
         # Sort by edge and limit
-        picks_sorted = sorted(picks, key=lambda x: x.get("edge", 0), reverse=True)[:limit]
+        picks_sorted = sorted(picks, key=lambda x: x.get("edge", 0) or 0, reverse=True)[:limit]
+        
+        # Final sanitization pass to ensure all values are JSON-safe
+        picks_sorted = [sanitize_dict(pick) for pick in picks_sorted]
         
         return {
             "sport": sport,

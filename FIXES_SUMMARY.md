@@ -258,6 +258,42 @@ These can be implemented post-deployment:
 
 ---
 
-**Status:** ✅ All Critical Fixes Complete  
+## ✅ JSON Serialization Fix (Critical Bug)
+
+### Problem:
+Edge calculations could return NaN (Not a Number) values, causing JSON serialization errors:
+```
+ValueError: Out of range float values are not JSON compliant: nan
+```
+
+This happened when edge calculation functions returned NaN values in dictionaries, which Python's JSON encoder cannot serialize.
+
+### Solution:
+1. Created `app/utils/json_sanitize.py` with utilities:
+   - `safe_float()`: Converts NaN/Inf to None
+   - `sanitize_dict()`: Recursively sanitizes dictionaries
+
+2. Updated `app/api_endpoints.py`:
+   - All edge calculation results are sanitized before use
+   - Final sanitization pass on all picks before returning JSON
+   - Prevents any NaN/Inf values from reaching JSON encoder
+
+### Testing:
+```powershell
+# Test the fix
+.\test_json_fix.ps1
+
+# Or manually test
+Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/predictions/latest?sport=NFL"
+# Should return 200 OK without NaN errors
+```
+
+**Files Changed:**
+- `app/utils/json_sanitize.py` (new)
+- `app/api_endpoints.py` (updated)
+
+---
+
+**Status:** ✅ All Critical Fixes Complete + JSON Bug Fixed  
 **Production Ready:** YES (after setting environment variables)
 

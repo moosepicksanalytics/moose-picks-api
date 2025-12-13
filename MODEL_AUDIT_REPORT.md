@@ -47,11 +47,15 @@
      - Added pool_recycle=3600 (1 hour connection recycling)
    - **Files:** `app/database.py`
 
+### ✅ Additional Fixes
+
+6. **JSON Serialization Fix** - Fixed NaN/Inf values causing JSON serialization errors in API responses
+
 ### ⏳ Remaining High-Priority Fixes
 
-6. **Model Caching** - Pending (improves prediction latency)
-7. **Input Validation** - Pending (Pydantic models for API requests)
-8. **Retry Logic** - Pending (external API call resilience)
+7. **Model Caching** - Pending (improves prediction latency)
+8. **Input Validation** - Pending (Pydantic models for API requests)
+9. **Retry Logic** - Pending (external API call resilience)
 
 ---
 
