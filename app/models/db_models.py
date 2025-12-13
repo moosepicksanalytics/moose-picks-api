@@ -59,7 +59,8 @@ class Prediction(Base):
     
     # Settling
     settled = Column(Boolean, default=False)
-    result = Column(String, nullable=True)  # win, loss, push
+    result = Column(String, nullable=True)  # win, loss, push (legacy)
+    settled_result = Column(String, nullable=True)  # win, loss, push
     pnl = Column(Float, nullable=True)
     
     predicted_at = Column(DateTime, default=datetime.utcnow)

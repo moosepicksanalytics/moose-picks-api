@@ -1,7 +1,7 @@
 """
 API endpoints for Lovable integration and scheduled tasks.
 """
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Request, Depends
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Request, Depends, Query
 from datetime import datetime, timedelta
 from typing import Optional
 import asyncio
@@ -1175,3 +1175,448 @@ def get_predictions_this_week(
         end_date=sunday.strftime("%Y-%m-%d"),
         limit=limit
     )
+
+
+@router.post("/settle-predictions")
+def settle_predictions_endpoint(sport: str = Query(...)):
+    """
+    Settle all unsettled predictions for a sport by matching against game results.
+    
+    Process:
+    1. Get all games with final status for this sport
+    2. Get all unsettled predictions for those games
+    3. Compare prediction vs actual result
+    4. Mark as won/lost
+    5. Calculate accuracy metrics
+    
+    Returns: {"settled": N, "accurate": M, "win_rate": X%}
+    """
+    from app.prediction.settling import (
+        settle_moneyline_prediction,
+        settle_spread_prediction,
+        settle_totals_prediction
+    )
+    from app.database import SessionLocal
+    from app.models.db_models import Prediction, Game
+    
+    db = SessionLocal()
+    try:
+        # Get all games with final status for this sport
+        games = db.query(Game).filter(
+            Game.sport == sport.upper(),
+            Game.status == 'final',
+            Game.home_score.isnot(None),
+            Game.away_score.isnot(None)
+        ).all()
+        
+        if not games:
+            return {
+                "sport": sport.upper(),
+                "settled": 0,
+                "accurate": 0,
+                "win_rate": 0.0,
+                "message": "No completed games found"
+            }
+        
+        game_ids = [g.id for g in games]
+        games_dict = {g.id: g for g in games}
+        
+        # Get all unsettled predictions for those games
+        predictions = db.query(Prediction).filter(
+            Prediction.sport == sport.upper(),
+            Prediction.game_id.in_(game_ids),
+            Prediction.settled == False
+        ).all()
+        
+        if not predictions:
+            return {
+                "sport": sport.upper(),
+                "settled": 0,
+                "accurate": 0,
+                "win_rate": 0.0,
+                "message": "No unsettled predictions found"
+            }
+        
+        settled_count = 0
+        accurate_count = 0
+        win_count = 0
+        loss_count = 0
+        push_count = 0
+        
+        for pred in predictions:
+            game = games_dict.get(pred.game_id)
+            if not game:
+                continue
+            
+            # Determine result based on market type
+            if pred.market == "moneyline":
+                result, pnl = settle_moneyline_prediction(pred, game)
+            elif pred.market == "spread":
+                result, pnl = settle_spread_prediction(pred, game)
+            elif pred.market in ["totals", "over_under"]:
+                result, pnl = settle_totals_prediction(pred, game)
+            else:
+                continue
+            
+            # Update prediction
+            pred.settled = True
+            pred.result = result  # Keep for backward compatibility
+            pred.settled_result = result  # New column
+            pred.pnl = pnl
+            pred.settled_at = datetime.now()
+            
+            settled_count += 1
+            if result == "win":
+                accurate_count += 1
+                win_count += 1
+            elif result == "loss":
+                loss_count += 1
+            else:
+                push_count += 1
+        
+        db.commit()
+        
+        win_rate = accurate_count / settled_count if settled_count > 0 else 0.0
+        
+        return {
+            "sport": sport.upper(),
+            "settled": settled_count,
+            "accurate": accurate_count,
+            "wins": win_count,
+            "losses": loss_count,
+            "pushes": push_count,
+            "win_rate": round(win_rate, 3)
+        }
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error settling predictions: {str(e)}"
+        )
+    finally:
+        db.close()
+
+
+@router.get("/metrics/accuracy/{sport}")
+def get_accuracy_metrics(sport: str, days: int = Query(30, ge=1, le=365)):
+    """
+    Get accuracy metrics for a sport (last N days of settled predictions).
+    
+    Returns:
+    {
+      "sport": "NFL",
+      "total_predictions": 234,
+      "wins": 122,
+      "losses": 112,
+      "win_rate": 0.521,
+      "vs_random": 0.021,  # How much better than 50%
+      "sample_size_adequate": true
+    }
+    """
+    from app.database import SessionLocal
+    from app.models.db_models import Prediction
+    from datetime import datetime, timedelta
+    
+    db = SessionLocal()
+    try:
+        cutoff_date = datetime.now() - timedelta(days=days)
+        
+        # Get settled predictions from the last N days
+        predictions = db.query(Prediction).filter(
+            Prediction.sport == sport.upper(),
+            Prediction.settled == True,
+            Prediction.settled_at >= cutoff_date
+        ).all()
+        
+        if not predictions:
+            return {
+                "sport": sport.upper(),
+                "total_predictions": 0,
+                "wins": 0,
+                "losses": 0,
+                "pushes": 0,
+                "win_rate": 0.0,
+                "vs_random": 0.0,
+                "sample_size_adequate": False,
+                "message": f"No settled predictions found in last {days} days"
+            }
+        
+        wins = sum(1 for p in predictions if p.settled_result == "win")
+        losses = sum(1 for p in predictions if p.settled_result == "loss")
+        pushes = sum(1 for p in predictions if p.settled_result == "push")
+        
+        # Calculate win rate (excluding pushes)
+        total_non_push = wins + losses
+        win_rate = wins / total_non_push if total_non_push > 0 else 0.0
+        
+        return {
+            "sport": sport.upper(),
+            "total_predictions": len(predictions),
+            "wins": wins,
+            "losses": losses,
+            "pushes": pushes,
+            "win_rate": round(win_rate, 3),
+            "vs_random": round(win_rate - 0.5, 3),  # How much better than 50%
+            "sample_size_adequate": len(predictions) >= 30
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching accuracy metrics: {str(e)}"
+        )
+    finally:
+        db.close()
+
+
+@router.post("/jobs/settle-daily")
+def settle_daily_predictions(api_key: str = Depends(require_api_key)):
+    """
+    Scheduled job (run daily via Railway cron).
+    Settles all predictions for finished games.
+    
+    This endpoint should be called daily at 11 PM UTC to settle all predictions
+    for games that have finished.
+    """
+    from app.prediction.settling import settle_predictions
+    
+    results = {}
+    for sport in ["NFL", "NBA", "NHL", "MLB"]:
+        try:
+            # Use the settle_predictions function from settling.py
+            # It needs a date, so we'll settle for today and yesterday
+            today = datetime.now().date()
+            yesterday = today - timedelta(days=1)
+            
+            # Settle yesterday's predictions
+            settle_predictions(yesterday.strftime("%Y-%m-%d"), sport=sport)
+            
+            # Also try today in case games finished early
+            settle_predictions(today.strftime("%Y-%m-%d"), sport=sport)
+            
+            results[sport] = "completed"
+        except Exception as e:
+            results[sport] = f"error: {str(e)}"
+    
+    return {
+        "status": "daily settling complete",
+        "results": results,
+        "timestamp": datetime.now().isoformat()
+    }
+
+
+@router.post("/diagnose-accuracy")
+def diagnose_model_accuracy(
+    sport: str = Query(...),
+    source: str = Query("csv", regex="^(csv|db)$"),
+    background_tasks: BackgroundTasks,
+    api_key: str = Depends(require_api_key)
+):
+    """
+    Run model accuracy diagnostic script via API.
+    
+    This endpoint runs the diagnostic script to analyze predictions vs actual results.
+    Results are saved to the exports directory and can be retrieved via logs.
+    
+    Args:
+        sport: Sport code (NFL, NHL, NBA, MLB)
+        source: Data source - "csv" (from exports) or "db" (from database)
+    
+    Returns:
+        Status message with output file paths
+    
+    Example:
+        POST /api/diagnose-accuracy?sport=NFL&source=csv
+    """
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from scripts.diagnose_model_accuracy import (
+        load_predictions_from_csv,
+        load_predictions_from_db,
+        get_game_results,
+        determine_prediction_result,
+        calculate_metrics,
+    )
+    import pandas as pd
+    from datetime import datetime
+    
+    def run_diagnostic():
+        try:
+            # Load predictions
+            if source == 'csv':
+                predictions_df = load_predictions_from_csv(sport.upper())
+            else:
+                predictions_df = load_predictions_from_db(sport.upper())
+            
+            if len(predictions_df) == 0:
+                print(f"No predictions found for {sport}")
+                return
+            
+            # Get game results
+            game_ids = predictions_df['game_id'].unique().tolist()
+            games_df = get_game_results(sport.upper(), game_ids)
+            
+            if len(games_df) == 0:
+                print(f"No completed games found for {sport}")
+                return
+            
+            # Merge and calculate
+            merged_df = predictions_df.merge(games_df, on='game_id', how='inner')
+            results = merged_df.apply(determine_prediction_result, axis=1)
+            merged_df['is_correct'] = [r[0] for r in results]
+            merged_df['actual_outcome'] = [r[1] for r in results]
+            
+            # Calculate metrics
+            metrics = calculate_metrics(merged_df)
+            
+            # Save results
+            output_dir = Path("exports")
+            output_dir.mkdir(exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            csv_path = output_dir / f"{sport}_accuracy_diagnostic_{timestamp}.csv"
+            merged_df.to_csv(csv_path, index=False)
+            
+            json_path = output_dir / f"{sport}_accuracy_summary_{timestamp}.json"
+            import json
+            with open(json_path, 'w') as f:
+                json.dump({
+                    'sport': sport.upper(),
+                    'timestamp': timestamp,
+                    'metrics': metrics,
+                }, f, indent=2)
+            
+            print(f"✓ Diagnostic complete: {csv_path.name}, {json_path.name}")
+            print(f"  Win Rate: {metrics.get('win_rate', 0):.1%}")
+            print(f"  ECE: {metrics.get('confidence', {}).get('ece', 'N/A')}")
+            
+        except Exception as e:
+            print(f"Error in diagnostic: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    # Run in background
+    background_tasks.add_task(run_diagnostic)
+    
+    return {
+        "status": "started",
+        "message": f"Diagnostic started for {sport.upper()} (source: {source})",
+        "sport": sport.upper(),
+        "source": source,
+        "note": "Check Railway logs to see results. Output files saved to exports/ directory."
+    }
+
+
+@router.post("/recalibrate-model")
+def recalibrate_model_endpoint(
+    sport: str = Query(...),
+    model: str = Query(...),
+    test_weeks: int = Query(2, ge=1, le=4),
+    background_tasks: BackgroundTasks,
+    api_key: str = Depends(require_api_key)
+):
+    """
+    Recalibrate a model using Platt scaling via API.
+    
+    This endpoint loads a trained model, applies Platt scaling calibration,
+    and saves a calibrated version.
+    
+    Args:
+        sport: Sport code (NFL, NHL, NBA, MLB)
+        model: Model filename (e.g., "NFL_spread_20251207_191802.pkl") or full path
+        test_weeks: Number of weeks to use for test set (default: 2)
+    
+    Returns:
+        Status message
+    
+    Example:
+        POST /api/recalibrate-model?sport=NFL&model=NFL_spread_20251207_191802.pkl
+    """
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from scripts.recalibrate_model import (
+        load_model,
+        prepare_calibration_data,
+        apply_platt_scaling,
+        evaluate_calibration,
+        create_calibrated_wrapper,
+    )
+    import joblib
+    from app.config import settings
+    
+    def run_recalibration():
+        try:
+            # Resolve model path
+            model_path = Path(model)
+            if not model_path.is_absolute():
+                # Assume it's in models directory
+                model_path = Path(settings.MODEL_DIR) / model
+            
+            if not model_path.exists():
+                print(f"Model not found: {model_path}")
+                return
+            
+            # Load model
+            model_data = load_model(str(model_path))
+            base_model = model_data['model']
+            market = model_data.get('market', 'unknown')
+            
+            print(f"Recalibrating {sport.upper()} {market} model...")
+            
+            # Prepare data
+            X_train, y_train, X_cal, y_cal, X_test, y_test, feature_cols = prepare_calibration_data(
+                sport.upper(), market, model_data, test_weeks=test_weeks
+            )
+            
+            # Evaluate base model
+            base_metrics = evaluate_calibration(base_model, X_test, y_test, "Base Model")
+            
+            # Apply Platt scaling
+            calibrator = apply_platt_scaling(base_model, X_cal, y_cal)
+            calibrated_model = create_calibrated_wrapper(base_model, calibrator)
+            
+            # Evaluate calibrated model
+            calibrated_metrics = evaluate_calibration(calibrated_model, X_test, y_test, "Calibrated Model")
+            
+            # Save calibrated model
+            model_dir = Path(settings.MODEL_DIR)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            calibrated_model_path = model_dir / f"{sport.upper()}_{market}_CALIBRATED_{timestamp}.pkl"
+            
+            calibrated_model_data = {
+                **model_data,
+                'model': calibrated_model,
+                'calibrator': calibrator,
+                'calibration_date': datetime.now().isoformat(),
+                'calibration_method': 'platt_scaling',
+                'base_ece': float(base_metrics['ece']),
+                'calibrated_ece': float(calibrated_metrics['ece']),
+                'ece_improvement': float(base_metrics['ece'] - calibrated_metrics['ece']),
+            }
+            
+            joblib.dump(calibrated_model_data, calibrated_model_path)
+            
+            print(f"✓ Calibrated model saved: {calibrated_model_path.name}")
+            print(f"  ECE Before: {base_metrics['ece']:.4f}")
+            print(f"  ECE After: {calibrated_metrics['ece']:.4f}")
+            print(f"  Improvement: {base_metrics['ece'] - calibrated_metrics['ece']:+.4f}")
+            
+        except Exception as e:
+            print(f"Error in recalibration: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    # Run in background
+    background_tasks.add_task(run_recalibration)
+    
+    return {
+        "status": "started",
+        "message": f"Recalibration started for {sport.upper()} model: {model}",
+        "sport": sport.upper(),
+        "model": model,
+        "test_weeks": test_weeks,
+        "note": "Check Railway logs to see results. Calibrated model saved to models/ directory."
+    }

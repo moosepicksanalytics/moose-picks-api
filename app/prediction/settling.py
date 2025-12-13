@@ -152,7 +152,8 @@ def settle_predictions(date_str: str, sport: str = None):
             
             # Update prediction
             pred.settled = True
-            pred.result = result
+            pred.result = result  # Keep for backward compatibility
+            pred.settled_result = result  # New column
             pred.pnl = pnl
             pred.settled_at = datetime.now()
             
