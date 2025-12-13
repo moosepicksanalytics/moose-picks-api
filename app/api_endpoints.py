@@ -1408,9 +1408,9 @@ def settle_daily_predictions(api_key: str = Depends(require_api_key)):
 
 @router.post("/diagnose-accuracy")
 def diagnose_model_accuracy(
+    background_tasks: BackgroundTasks,
     sport: str = Query(...),
     source: str = Query("csv", regex="^(csv|db)$"),
-    background_tasks: BackgroundTasks,
     api_key: str = Depends(require_api_key)
 ):
     """
@@ -1511,10 +1511,10 @@ def diagnose_model_accuracy(
 
 @router.post("/recalibrate-model")
 def recalibrate_model_endpoint(
+    background_tasks: BackgroundTasks,
     sport: str = Query(...),
     model: str = Query(...),
     test_weeks: int = Query(2, ge=1, le=4),
-    background_tasks: BackgroundTasks,
     api_key: str = Depends(require_api_key)
 ):
     """
