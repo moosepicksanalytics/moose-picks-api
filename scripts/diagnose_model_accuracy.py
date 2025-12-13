@@ -53,6 +53,10 @@ def load_predictions_from_csv(sport: str) -> pd.DataFrame:
     if 'market_type' in df.columns:
         df = df.rename(columns={'market_type': 'market'})
     
+    # Convert game_id to string (database stores as VARCHAR)
+    if 'game_id' in df.columns:
+        df['game_id'] = df['game_id'].astype(str)
+    
     return df
 
 
@@ -95,9 +99,12 @@ def get_game_results(sport: str, game_ids: list) -> pd.DataFrame:
     """Query game results from database."""
     db = SessionLocal()
     try:
+        # Convert game_ids to strings (database stores id as VARCHAR)
+        game_ids_str = [str(gid) for gid in game_ids]
+        
         games = db.query(Game).filter(
             Game.sport == sport,
-            Game.id.in_(game_ids),
+            Game.id.in_(game_ids_str),
             Game.status == 'final',
             Game.home_score.isnot(None),
             Game.away_score.isnot(None)
