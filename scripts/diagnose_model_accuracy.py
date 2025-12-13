@@ -385,10 +385,17 @@ def main():
         
         # Get game results
         game_ids = predictions_df['game_id'].unique().tolist()
+        logger.info(f"Looking for {len(game_ids)} games in database...")
         games_df = get_game_results(sport, game_ids)
         
         if len(games_df) == 0:
-            logger.error(f"No completed games found for {sport}")
+            logger.warning(f"No completed games found for {sport}")
+            logger.warning(f"  Searched for {len(game_ids)} game IDs from predictions")
+            logger.warning(f"  This usually means:")
+            logger.warning(f"    - Games haven't finished yet (check the date in CSV)")
+            logger.warning(f"    - Games don't have final scores in database")
+            logger.warning(f"    - Game IDs don't match between CSV and database")
+            logger.warning(f"  Try running this after games have completed and scores are updated")
             return
         
         logger.info(f"Found {len(games_df)} completed games")

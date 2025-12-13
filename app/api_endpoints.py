@@ -1459,6 +1459,9 @@ def diagnose_model_accuracy(
             
             if len(games_df) == 0:
                 print(f"No completed games found for {sport}")
+                print(f"  Searched for {len(game_ids)} game IDs from predictions")
+                print(f"  This usually means the games haven't finished yet or don't have final scores in the database")
+                print(f"  Try running this after games have completed and scores are updated")
                 return
             
             # Merge and calculate
