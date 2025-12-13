@@ -28,6 +28,10 @@ def get_database_url() -> str:
 
 engine = create_engine(
     get_database_url(),
+    pool_size=10,  # Number of connections to maintain
+    max_overflow=20,  # Additional connections beyond pool_size
+    pool_pre_ping=True,  # Verify connections before using
+    pool_recycle=3600,  # Recycle connections after 1 hour
     connect_args={"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {},
 )
 

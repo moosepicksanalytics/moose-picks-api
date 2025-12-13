@@ -31,13 +31,15 @@ except Exception as e:
 
 app = FastAPI(title="Moose Picks API", version="0.1")
 
-# Add CORS middleware to allow requests from Lovable
+# Add CORS middleware - configurable via ALLOWED_ORIGINS environment variable
+from app.config import settings
+cors_origins = settings.allowed_origins_list
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins (can be restricted to specific Lovable domains in production)
+    allow_origins=cors_origins,  # Configured via ALLOWED_ORIGINS env var
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all HTTP methods (GET, POST, etc.)
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=["GET", "POST"],  # Restrict to necessary methods only
+    allow_headers=["Content-Type", "Authorization", "X-API-Key"],  # Restrict headers
 )
 
 # Include API router for Lovable/scheduled tasks

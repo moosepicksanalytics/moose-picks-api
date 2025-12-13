@@ -1,10 +1,11 @@
 """
 API endpoints for Lovable integration and scheduled tasks.
 """
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Request, Depends
 from datetime import datetime, timedelta
 from typing import Optional
 import asyncio
+from app.security import require_api_key
 
 router = APIRouter()
 
@@ -12,9 +13,11 @@ router = APIRouter()
 @router.post("/backfill")
 def trigger_backfill(
     background_tasks: BackgroundTasks,
+    request: Request,
     sports: Optional[str] = None,
     seasons: Optional[str] = None,
-    delay: float = 0.1
+    delay: float = 0.1,
+    api_key: str = Depends(require_api_key)
 ):
     """
     Trigger historical data backfill from API.
@@ -81,10 +84,12 @@ def trigger_backfill(
 @router.post("/backfill-odds")
 def trigger_backfill_odds(
     background_tasks: BackgroundTasks,
+    request: Request,
     sport: Optional[str] = None,
     start_date: str = None,
     end_date: str = None,
-    dry_run: bool = False
+    dry_run: bool = False,
+    api_key: str = Depends(require_api_key)
 ):
     """
     Backfill historical odds data for games in the database.
@@ -170,7 +175,11 @@ def trigger_backfill_odds(
 
 
 @router.post("/migrate-ou-columns")
-def trigger_migrate_ou_columns(background_tasks: BackgroundTasks):
+def trigger_migrate_ou_columns(
+    background_tasks: BackgroundTasks,
+    request: Request,
+    api_key: str = Depends(require_api_key)
+):
     """
     Run database migration to add O/U columns (closing_total, actual_total, ou_result).
     
@@ -206,9 +215,11 @@ def trigger_migrate_ou_columns(background_tasks: BackgroundTasks):
 @router.post("/backfill-ou-data")
 def trigger_backfill_ou_data(
     background_tasks: BackgroundTasks,
+    request: Request,
     sport: Optional[str] = None,
     start_date: Optional[str] = None,
-    end_date: Optional[str] = None
+    end_date: Optional[str] = None,
+    api_key: str = Depends(require_api_key)
 ):
     """
     Backfill Over/Under (O/U) data for historical games.
@@ -262,7 +273,13 @@ def trigger_backfill_ou_data(
 
 
 @router.post("/train")
-def train_model(sport: str, market: str, background_tasks: BackgroundTasks):
+def train_model(
+    sport: str,
+    market: str,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    api_key: str = Depends(require_api_key)
+):
     """
     Train a model for a specific sport and market.
     
@@ -422,10 +439,12 @@ def get_ou_coverage(sport: Optional[str] = None):
 @router.post("/trigger-daily-workflow")
 def trigger_daily_workflow(
     background_tasks: BackgroundTasks,
+    request: Request,
     train: bool = True,
     predict: bool = True,
     sports: Optional[str] = None,
-    min_edge: float = 0.05
+    min_edge: float = 0.05,
+    api_key: str = Depends(require_api_key)
 ):
     """
     Trigger daily workflow from Lovable or external scheduler.

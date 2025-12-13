@@ -111,6 +111,7 @@ def store_predictions_for_game(
 ) -> list:
     """
     Store all predictions for a game (moneyline, spread, totals).
+    Uses a single database transaction for atomicity.
     
     Args:
         game_id: Game ID
@@ -121,64 +122,112 @@ def store_predictions_for_game(
     Returns:
         List of stored Prediction objects
     """
+    db = SessionLocal()
     stored = []
     
-    # Store moneyline prediction
-    if "moneyline" in predictions_dict and predictions_dict["moneyline"]:
-        ml = predictions_dict["moneyline"]
-        if "home_win_prob" in ml:
-            # Only store if there's a valid recommendation (best_side exists and edge > 0)
-            # If best_side is None, it means no value bet (negative or zero edge)
-            best_side = ml.get("best_side")
-            best_edge = ml.get("best_edge", 0)
-            
-            # Store prediction even if no value bet (for tracking purposes)
-            # But log a warning if edge is negative
-            if best_edge < 0:
-                print(f"  ⚠️  Storing prediction with negative edge ({best_edge:.1%}) - no value bet recommended")
-            
-            try:
-                pred = store_prediction(
-                    game_id=game_id,
-                    sport=sport,
-                    market="moneyline",
-                    home_win_prob=ml["home_win_prob"],
-                    model_version=model_version
-                )
-                stored.append(pred)
-            except Exception as e:
-                print(f"Error storing moneyline prediction: {e}")
-    
-    # Store spread prediction
-    if "spread" in predictions_dict and predictions_dict["spread"]:
-        spread = predictions_dict["spread"]
-        if "cover_prob" in spread:
-            try:
-                pred = store_prediction(
-                    game_id=game_id,
-                    sport=sport,
-                    market="spread",
-                    spread_cover_prob=spread["cover_prob"],
-                    model_version=model_version
-                )
-                stored.append(pred)
-            except Exception as e:
-                print(f"Error storing spread prediction: {e}")
-    
-    # Store totals prediction
-    if "totals" in predictions_dict and predictions_dict["totals"]:
-        totals = predictions_dict["totals"]
-        if "over_prob" in totals:
-            try:
-                pred = store_prediction(
-                    game_id=game_id,
-                    sport=sport,
-                    market="totals",
-                    over_prob=totals["over_prob"],
-                    model_version=model_version
-                )
-                stored.append(pred)
-            except Exception as e:
-                print(f"Error storing totals prediction: {e}")
-    
-    return stored
+    try:
+        if model_version is None:
+            model_version = get_model_version()
+        
+        # Store moneyline prediction
+        if "moneyline" in predictions_dict and predictions_dict["moneyline"]:
+            ml = predictions_dict["moneyline"]
+            if "home_win_prob" in ml:
+                best_side = ml.get("best_side")
+                best_edge = ml.get("best_edge", 0)
+                
+                if best_edge < 0:
+                    print(f"  ⚠️  Storing prediction with negative edge ({best_edge:.1%}) - no value bet recommended")
+                
+                # Check if prediction already exists
+                existing = db.query(Prediction).filter(
+                    Prediction.game_id == game_id,
+                    Prediction.market == "moneyline"
+                ).first()
+                
+                if existing:
+                    existing.home_win_prob = ml["home_win_prob"]
+                    existing.model_version = model_version
+                    stored.append(existing)
+                else:
+                    pred = Prediction(
+                        id=str(uuid.uuid4()),
+                        game_id=game_id,
+                        sport=sport,
+                        market="moneyline",
+                        model_version=model_version,
+                        home_win_prob=ml["home_win_prob"],
+                        settled=False
+                    )
+                    db.add(pred)
+                    stored.append(pred)
+        
+        # Store spread prediction
+        if "spread" in predictions_dict and predictions_dict["spread"]:
+            spread = predictions_dict["spread"]
+            if "cover_prob" in spread:
+                existing = db.query(Prediction).filter(
+                    Prediction.game_id == game_id,
+                    Prediction.market == "spread"
+                ).first()
+                
+                if existing:
+                    existing.spread_cover_prob = spread["cover_prob"]
+                    existing.model_version = model_version
+                    stored.append(existing)
+                else:
+                    pred = Prediction(
+                        id=str(uuid.uuid4()),
+                        game_id=game_id,
+                        sport=sport,
+                        market="spread",
+                        model_version=model_version,
+                        spread_cover_prob=spread["cover_prob"],
+                        settled=False
+                    )
+                    db.add(pred)
+                    stored.append(pred)
+        
+        # Store totals prediction
+        if "totals" in predictions_dict and predictions_dict["totals"]:
+            totals = predictions_dict["totals"]
+            if "over_prob" in totals:
+                existing = db.query(Prediction).filter(
+                    Prediction.game_id == game_id,
+                    Prediction.market == "totals"
+                ).first()
+                
+                if existing:
+                    existing.over_prob = totals["over_prob"]
+                    existing.model_version = model_version
+                    stored.append(existing)
+                else:
+                    pred = Prediction(
+                        id=str(uuid.uuid4()),
+                        game_id=game_id,
+                        sport=sport,
+                        market="totals",
+                        model_version=model_version,
+                        over_prob=totals["over_prob"],
+                        settled=False
+                    )
+                    db.add(pred)
+                    stored.append(pred)
+        
+        # Commit all predictions in a single transaction
+        db.commit()
+        
+        # Refresh all stored predictions
+        for pred in stored:
+            db.refresh(pred)
+        
+        return stored
+        
+    except Exception as e:
+        db.rollback()
+        print(f"Error storing predictions for game {game_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise e
+    finally:
+        db.close()
