@@ -188,21 +188,23 @@ curl -X POST "https://moose-picks-api-production.up.railway.app/api/jobs/settle-
 
 **PowerShell Examples:**
 ```powershell
-# Diagnostic
+# Diagnostic (POST request - requires -Method POST)
 Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/diagnose-accuracy?sport=NFL&source=csv" `
   -Method POST -Headers @{"X-API-Key"="YOUR_API_KEY"}
 
-# Recalibration
+# Recalibration (POST request)
 Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/recalibrate-model?sport=NFL&model=NFL_spread_20251207_191802.pkl" `
   -Method POST -Headers @{"X-API-Key"="YOUR_API_KEY"}
 
-# Settle predictions
+# Settle predictions (POST request)
 Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/settle-predictions?sport=NFL" `
   -Method POST -Headers @{"X-API-Key"="YOUR_API_KEY"}
 
-# Get metrics
+# Get metrics (GET request - no -Method needed)
 Invoke-RestMethod -Uri "https://moose-picks-api-production.up.railway.app/api/metrics/accuracy/NFL?days=30"
 ```
+
+**Note:** `Invoke-RestMethod` defaults to GET. For POST endpoints, you must include `-Method POST`.
 
 **Note:** Scripts run via API execute in the background. Check Railway logs to see results:
 - Diagnostic: Results saved to `exports/{sport}_accuracy_diagnostic_{timestamp}.csv` and `.json`

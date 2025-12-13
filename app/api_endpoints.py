@@ -1410,8 +1410,7 @@ def settle_daily_predictions(api_key: str = Depends(require_api_key)):
 def diagnose_model_accuracy(
     background_tasks: BackgroundTasks,
     sport: str = Query(...),
-    source: str = Query("csv", regex="^(csv|db)$"),
-    api_key: str = Depends(require_api_key)
+    source: str = Query("csv", regex="^(csv|db)$")
 ):
     """
     Run model accuracy diagnostic script via API.
@@ -1514,8 +1513,7 @@ def recalibrate_model_endpoint(
     background_tasks: BackgroundTasks,
     sport: str = Query(...),
     model: str = Query(...),
-    test_weeks: int = Query(2, ge=1, le=4),
-    api_key: str = Depends(require_api_key)
+    test_weeks: int = Query(2, ge=1, le=4)
 ):
     """
     Recalibrate a model using Platt scaling via API.
