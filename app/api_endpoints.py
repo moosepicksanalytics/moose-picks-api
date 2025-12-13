@@ -742,21 +742,38 @@ def get_latest_predictions(sport: str = "NFL", limit: int = 10):
         
     except Exception as e:
         # Log the error for debugging
-        logger.error(f"Unexpected error in get_latest_predictions: {e}", exc_info=True)
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"Unexpected error in get_latest_predictions: {e}\n{error_trace}")
+        
         # If database query fails, try CSV fallback
         try:
             db.close()
             return _get_latest_predictions_from_csv(sport, limit)
         except Exception as csv_error:
             # If both fail, return empty result instead of 500 error
-            logger.error(f"Both database and CSV fallback failed: {csv_error}")
-            return {
-                "sport": sport,
-                "source": "none",
-                "total_predictions": 0,
-                "top_picks": [],
-                "message": f"No predictions available. Error: {str(e)}"
-            }
+            csv_trace = traceback.format_exc()
+            logger.error(f"Both database and CSV fallback failed: {csv_error}\n{csv_trace}")
+            
+            # Return error details in development, generic message in production
+            import os
+            if os.getenv("DEBUG", "false").lower() == "true":
+                return {
+                    "sport": sport,
+                    "source": "error",
+                    "total_predictions": 0,
+                    "top_picks": [],
+                    "error": str(e),
+                    "traceback": error_trace
+                }
+            else:
+                return {
+                    "sport": sport,
+                    "source": "none",
+                    "total_predictions": 0,
+                    "top_picks": [],
+                    "message": "No predictions available"
+                }
     finally:
         try:
             db.close()
@@ -824,15 +841,20 @@ def _get_latest_predictions_from_csv(sport: str, limit: int):
                 "message": f"CSV file {latest_csv.name} missing 'edge' column"
             }
         
-        # Return top picks by edge
-        df_sorted = df.sort_values("edge", ascending=False).head(limit)
+        # Return top picks by edge (handle NaN values in edge column)
+        df_sorted = df.sort_values("edge", ascending=False, na_position='last').head(limit)
+        
+        # Sanitize DataFrame records to remove NaN values before converting to dict
+        from app.utils.json_sanitize import sanitize_dict
+        records = df_sorted.to_dict("records")
+        sanitized_records = [sanitize_dict(record) for record in records]
         
         return {
             "sport": sport,
             "source": "csv",
             "file": latest_csv.name,
             "total_predictions": len(df),
-            "top_picks": df_sorted.to_dict("records")
+            "top_picks": sanitized_records
         }
     except Exception as e:
         logger.error(f"Error reading CSV file {latest_csv.name}: {e}")
